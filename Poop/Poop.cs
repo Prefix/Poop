@@ -1,0 +1,197 @@
+using System;
+using System.IO;
+using Prefix.Poop.Extensions;
+using Prefix.Poop.Interfaces;
+using Prefix.Poop.Managers;
+using Prefix.Poop.Modules;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Sharp.Shared;
+
+namespace Prefix.Poop;
+
+public sealed class Poop : IModSharpModule
+{
+    public string DisplayName   => "Poop";
+    public string DisplayAuthor => "Prefix";
+
+    private readonly ILogger<Poop> _logger;
+    private readonly InterfaceBridge  _bridge;
+    private readonly ServiceProvider  _serviceProvider;
+
+    public Poop(ISharedSystem sharedSystem,
+        string?                  dllPath,
+        string?                  sharpPath,
+        Version?                 version,
+        IConfiguration?          coreConfiguration,
+        bool                     hotReload)
+    {
+        ArgumentNullException.ThrowIfNull(dllPath);
+        ArgumentNullException.ThrowIfNull(sharpPath);
+        ArgumentNullException.ThrowIfNull(version);
+        ArgumentNullException.ThrowIfNull(coreConfiguration);
+
+        var bridge = new InterfaceBridge(dllPath, sharpPath, version, this, sharedSystem);
+
+        // Try to load appsettings.json first (server config), fall back to appsettings.example.json
+        var configFileName = "appsettings.json";
+        var configPath = Path.Combine(dllPath, configFileName);
+        
+        if (!File.Exists(configPath))
+        {
+            configFileName = "appsettings.example.json";
+            configPath = Path.Combine(dllPath, configFileName);
+        }
+
+        var configuration = new ConfigurationBuilder()
+                            .AddJsonFile(configPath, false, false)
+                            .Build();
+
+        //sharedSystem.GetModSharp().GetGameData().Register("Poop.games");
+
+        var services = new ServiceCollection();
+
+        services.AddSingleton(bridge);
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddLogging(sharedSystem.GetLoggerFactory());
+
+        ConfigureServices(services);
+
+        _bridge          = bridge;
+        _logger          = sharedSystem.GetLoggerFactory().CreateLogger<Poop>();
+        _serviceProvider = services.BuildServiceProvider();
+    }
+
+    public bool Init()
+    {
+        _logger.LogInformation(
+            "Oh wow, we seem to be crossing paths a lot lately... Where could I have seen you before? Can you figure it out?");
+
+        var init = 0;
+
+        var managers = CallInit<IManager>();
+
+        if (managers > 0)
+        {
+            init += managers;
+        }
+
+        var modules = CallInit<IModule>();
+
+        if (modules > 0)
+        {
+            init += modules;
+        }
+
+        return init == 0 ? throw new ApplicationException("No Modules") : true;
+    }
+
+    public void PostInit()
+    {
+        _logger.LogInformation("Why don't you stay and play for a while?");
+
+        CallPostInit<IManager>();
+        CallPostInit<IModule>();
+    }
+
+    public void Shutdown()
+    {
+        _logger.LogInformation("See you around, Nameless~ Try to stay out of trouble, especially... the next time we meet!");
+
+        CallShutdown<IModule>();
+        CallShutdown<IManager>();
+
+        // You must unregister your game data when your module is unloaded.
+        _bridge.GameData.Unregister("Poop.games");
+    }
+
+    public void OnAllModulesLoaded()
+    {
+        _logger.LogInformation("A foolish sage or a wise fool... Who will I become next?");
+
+        CallOnAllSharpModulesLoaded<IManager>();
+        CallOnAllSharpModulesLoaded<IModule>();
+    }
+
+    public void OnLibraryConnected(string name)
+    {
+        _logger.LogInformation("The~ Game~ Is~ On~");
+    }
+
+    public void OnLibraryDisconnect(string name)
+    {
+        _logger.LogInformation("Done playing for today...");
+    }
+
+    private static void ConfigureServices(IServiceCollection services)
+    {
+        services
+            .AddManagers() // Managers
+            .AddModules(); // Modules;
+    }
+
+    private int CallInit<T>() where T : IBaseInterface
+    {
+        var init = 0;
+
+        foreach (var service in _serviceProvider.GetServices<T>())
+        {
+            if (!service.Init())
+            {
+                _logger.LogError("Failed to Init {service}!", service.GetType().FullName);
+
+                return -1;
+            }
+
+            init++;
+        }
+
+        return init;
+    }
+
+    private void CallPostInit<T>() where T : IBaseInterface
+    {
+        foreach (var service in _serviceProvider.GetServices<T>())
+        {
+            try
+            {
+                service.OnPostInit();
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "An error occurred while calling PostInit in {m}", service.GetType().Name);
+            }
+        }
+    }
+
+    private void CallShutdown<T>() where T : IBaseInterface
+    {
+        foreach (var service in _serviceProvider.GetServices<T>())
+        {
+            try
+            {
+                service.Shutdown();
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "An error occurred while calling Shutdown in {m}", service.GetType().Name);
+            }
+        }
+    }
+
+    private void CallOnAllSharpModulesLoaded<T>() where T : IBaseInterface
+    {
+        foreach (var service in _serviceProvider.GetServices<T>())
+        {
+            try
+            {
+                service.OnAllSharpModulesLoaded();
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "An error occurred while calling OnAllSharpModulesLoaded in {m}", service.GetType().Name);
+            }
+        }
+    }
+}
