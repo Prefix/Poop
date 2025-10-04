@@ -1,10 +1,14 @@
 using Prefix.Poop.Interfaces;
-using Prefix.Poop.Modules.EventExample;
-//using Prefix.Poop.Modules.HookExample;
-using Prefix.Poop.Modules.SharedInterfaceExample;
+using Prefix.Poop.Interfaces.PoopModule;
+using Prefix.Poop.Interfaces.Modules;
 using Prefix.Poop.Modules.PoopModule;
-using Microsoft.Extensions.Configuration;
+using Prefix.Poop.Modules.FlashingHtmlHudFix;
+using Prefix.Poop.Modules.PoopPlayer;
+using Prefix.Poop.Modules.PoopModule.Lifecycle;
+using Prefix.Poop.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Prefix.Poop.Interfaces.Database;
+using Prefix.Poop.Shared;
 
 namespace Prefix.Poop.Modules;
 
@@ -12,26 +16,18 @@ internal static class ModulesDependencyInjection
 {
     public static IServiceCollection AddModules(this IServiceCollection services)
     {
-        // Register Poop Module Configuration
-        services.AddSingleton<PoopModuleConfig>(sp =>
-        {
-            var configuration = sp.GetRequiredService<IConfiguration>();
-            var config = new PoopModuleConfig();
-            configuration.GetSection("PoopModule").Bind(config);
-            config.Validate(); // Validate and fix any invalid values
-            return config;
-        });
-
-        return services
-           //.AddSingleton<IModule, BlockEvent>()
-           //.AddSingleton<IModule, ListenEvent>()
-           //.AddSingleton<IModule, ReplaceEvent>()
-           //.AddSingleton<IModule, FilterCrashFixes>()
-           .AddSingleton<IModule, SharedInterface>()
-           // Poop Module - Main game event handlers and command system
-           .AddSingleton<IModule, PoopModule.PoopModule>()
-           .AddSingleton<IModule, PoopCommands>()
-           // Poop Module - Database service
-           .AddSingleton<IPoopDatabase, PoopDatabase>();
+        services.AddSingleton<IModule, IPoopShared, SharedInterface.SharedInterface>();
+        services.AddSingleton<IModule, PoopPrecache>();
+        services.AddSingleton<IModule, PoopCommands>();
+        services.AddSingleton<IModule, IPoopDatabase, PoopDatabase>();
+        services.AddSingleton<IModule, IPoopSpawner, PoopSpawner>();
+        services.AddSingleton<IModule, IPoopPlayerManager, PoopPlayerManager>();
+        services.AddSingleton<IModule, IPoopColorMenu, PoopColorMenu>();
+        services.AddSingleton<IModule, IRainbowPoopTracker, RainbowPoopTracker>();
+        services.AddSingleton<IModule, IDeadPlayerTracker, DeadPlayerTracker>();
+        services.AddSingleton<IModule, IRagdollTracker, RagdollTracker>();
+        services.AddSingleton<IModule, IPoopLifecycleManager, PoopLifecycleManager>();
+        services.AddSingleton<IModule, FlashingHtmlHudFixModule>();
+        return services;
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Prefix.Poop.Extensions;
 using Prefix.Poop.Interfaces;
 using Prefix.Poop.Managers;
@@ -13,19 +14,19 @@ namespace Prefix.Poop;
 
 public sealed class Poop : IModSharpModule
 {
-    public string DisplayName   => "Poop";
+    public string DisplayName => "Poop";
     public string DisplayAuthor => "Prefix";
 
     private readonly ILogger<Poop> _logger;
-    private readonly InterfaceBridge  _bridge;
-    private readonly ServiceProvider  _serviceProvider;
+    private readonly InterfaceBridge _bridge;
+    private readonly ServiceProvider _serviceProvider;
 
     public Poop(ISharedSystem sharedSystem,
-        string?                  dllPath,
-        string?                  sharpPath,
-        Version?                 version,
-        IConfiguration?          coreConfiguration,
-        bool                     hotReload)
+        string? dllPath,
+        string? sharpPath,
+        Version? version,
+        IConfiguration? coreConfiguration,
+        bool hotReload)
     {
         ArgumentNullException.ThrowIfNull(dllPath);
         ArgumentNullException.ThrowIfNull(sharpPath);
@@ -37,7 +38,7 @@ public sealed class Poop : IModSharpModule
         // Try to load appsettings.json first (server config), fall back to appsettings.example.json
         var configFileName = "appsettings.json";
         var configPath = Path.Combine(dllPath, configFileName);
-        
+
         if (!File.Exists(configPath))
         {
             configFileName = "appsettings.example.json";
@@ -58,8 +59,9 @@ public sealed class Poop : IModSharpModule
 
         ConfigureServices(services);
 
-        _bridge          = bridge;
-        _logger          = sharedSystem.GetLoggerFactory().CreateLogger<Poop>();
+        _bridge = bridge;
+        _logger = sharedSystem.GetLoggerFactory().CreateLogger<Poop>();
+
         _serviceProvider = services.BuildServiceProvider();
     }
 
@@ -67,6 +69,8 @@ public sealed class Poop : IModSharpModule
     {
         _logger.LogInformation(
             "Oh wow, we seem to be crossing paths a lot lately... Where could I have seen you before? Can you figure it out?");
+
+        _logger.LogInformation("📦 Starting initialization of all services...");
 
         var init = 0;
 
@@ -128,25 +132,27 @@ public sealed class Poop : IModSharpModule
     {
         services
             .AddManagers() // Managers
-            .AddModules(); // Modules;
+            .AddModules(); // Modules
     }
 
     private int CallInit<T>() where T : IBaseInterface
     {
         var init = 0;
+        var services = _serviceProvider.GetServices<T>().ToList();
 
-        foreach (var service in _serviceProvider.GetServices<T>())
+        foreach (var service in services)
         {
-            if (!service.Init())
+            try
             {
-                _logger.LogError("Failed to Init {service}!", service.GetType().FullName);
-
-                return -1;
+                service.Init();
+                init++;
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "An error occurred while calling Init in {m}", service.GetType().Name);
             }
 
-            init++;
         }
-
         return init;
     }
 

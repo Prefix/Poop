@@ -4,65 +4,27 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Prefix.Poop.Interfaces.Database;
+using Prefix.Poop.Interfaces.Managers;
+using Prefix.Poop.Shared.Models;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
 
 namespace Prefix.Poop.Modules.PoopModule;
 
 /// <summary>
-/// Interface for poop database operations
-/// </summary>
-internal interface IPoopDatabase
-{
-    /// <summary>
-    /// Gets the top players by poop count (players who placed the most poops)
-    /// </summary>
-    Task<PoopRecord[]> GetTopPoopersAsync(int limit = 10);
-
-    /// <summary>
-    /// Gets the top players by victim count (players who were pooped on the most)
-    /// </summary>
-    Task<PoopRecord[]> GetTopVictimsAsync(int limit = 10);
-
-    /// <summary>
-    /// Increments the poop count for a player
-    /// </summary>
-    Task IncrementPoopCountAsync(ulong steamId, string playerName);
-
-    /// <summary>
-    /// Increments the victim count for a player
-    /// </summary>
-    Task IncrementVictimCountAsync(ulong steamId, string playerName);
-
-    /// <summary>
-    /// Gets a player's poop statistics
-    /// </summary>
-    Task<PoopRecord?> GetPlayerStatsAsync(ulong steamId);
-
-    /// <summary>
-    /// Saves a player's poop color preference
-    /// </summary>
-    Task SaveColorPreferenceAsync(ulong steamId, PoopColorPreference preference);
-
-    /// <summary>
-    /// Loads a player's poop color preference
-    /// </summary>
-    Task<PoopColorPreference?> LoadColorPreferenceAsync(ulong steamId);
-}
-
-/// <summary>
 /// MySQL implementation of poop database
 /// </summary>
 internal sealed class PoopDatabase : IPoopDatabase, IDisposable
 {
-    private readonly PoopModuleConfig _config;
+    private readonly IConfigManager _config;
     private readonly ILogger<PoopDatabase> _logger;
     private readonly string _connectionString;
     private readonly AsyncLocal<MySqlConnection?> _asyncConnection = new();
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private MySqlConnection? _initConnection;
 
-    public PoopDatabase(PoopModuleConfig config, ILogger<PoopDatabase> logger)
+    public PoopDatabase(IConfigManager config, ILogger<PoopDatabase> logger)
     {
         _config = config;
         _logger = logger;
@@ -118,21 +80,6 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
 
         try
         {
-            // Create poop_stats table
-            _initConnection.Execute(@"
-                CREATE TABLE IF NOT EXISTS poop_stats (
-                    steam_id BIGINT UNSIGNED PRIMARY KEY,
-                    name VARCHAR(255) NOT NULL,
-                    poop_count INT UNSIGNED DEFAULT 0,
-                    victim_count INT UNSIGNED DEFAULT 0,
-                    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_poop_count (poop_count DESC),
-                    INDEX idx_victim_count (victim_count DESC)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-            ");
-
-            _logger.LogInformation("Table 'poop_stats' created or verified");
-
             // Create poop_colors table
             _initConnection.Execute(@"
                 CREATE TABLE IF NOT EXISTS poop_colors (
@@ -141,11 +88,53 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                     green TINYINT UNSIGNED NOT NULL,
                     blue TINYINT UNSIGNED NOT NULL,
                     is_rainbow BOOLEAN DEFAULT FALSE,
+                    is_random BOOLEAN DEFAULT FALSE,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
             _logger.LogInformation("Table 'poop_colors' created or verified");
+
+            // Add is_random column if it doesn't exist (migration for existing databases)
+            try
+            {
+                _initConnection.Execute(@"
+                    ALTER TABLE poop_colors 
+                    ADD COLUMN IF NOT EXISTS is_random BOOLEAN DEFAULT FALSE AFTER is_rainbow;
+                ");
+                _logger.LogInformation("Migration: 'is_random' column added to poop_colors table");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Column 'is_random' may already exist or migration not needed");
+            }
+
+            // Create poop_logs table for detailed poop event logging
+            _initConnection.Execute(@"
+                CREATE TABLE IF NOT EXISTS poop_logs (
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    player_name VARCHAR(255) NOT NULL,
+                    player_steamid VARCHAR(64) NOT NULL,
+                    target_name VARCHAR(255) NULL,
+                    target_steamid VARCHAR(64) NULL,
+                    map_name VARCHAR(255) NOT NULL,
+                    poop_size FLOAT NOT NULL,
+                    poop_color_r TINYINT UNSIGNED NOT NULL,
+                    poop_color_g TINYINT UNSIGNED NOT NULL,
+                    poop_color_b TINYINT UNSIGNED NOT NULL,
+                    is_rainbow BOOLEAN DEFAULT FALSE,
+                    player_x FLOAT NOT NULL,
+                    player_y FLOAT NOT NULL,
+                    player_z FLOAT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_player_steamid (player_steamid),
+                    INDEX idx_target_steamid (target_steamid),
+                    INDEX idx_map_name (map_name),
+                    INDEX idx_timestamp (timestamp DESC)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            _logger.LogInformation("Table 'poop_logs' created or verified");
         }
         catch (Exception ex)
         {
@@ -171,165 +160,6 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         return _asyncConnection.Value;
     }
 
-    public async Task<PoopRecord[]> GetTopPoopersAsync(int limit = 10)
-    {
-        try
-        {
-            await _semaphore.WaitAsync();
-
-            var connection = await GetConnectionAsync();
-            var results = await connection.QueryAsync<PoopRecord>(@"
-                SELECT 
-                    steam_id as SteamId,
-                    name as Name,
-                    poop_count as PoopCount,
-                    victim_count as VictimCount,
-                    last_updated as LastUpdated
-                FROM poop_stats 
-                WHERE poop_count > 0
-                ORDER BY poop_count DESC, last_updated DESC
-                LIMIT @Limit",
-                new { Limit = limit });
-
-            return results.ToArray();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting top poopers");
-            return Array.Empty<PoopRecord>();
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    public async Task<PoopRecord[]> GetTopVictimsAsync(int limit = 10)
-    {
-        try
-        {
-            await _semaphore.WaitAsync();
-
-            var connection = await GetConnectionAsync();
-            var results = await connection.QueryAsync<PoopRecord>(@"
-                SELECT 
-                    steam_id as SteamId,
-                    name as Name,
-                    poop_count as PoopCount,
-                    victim_count as VictimCount,
-                    last_updated as LastUpdated
-                FROM poop_stats 
-                WHERE victim_count > 0
-                ORDER BY victim_count DESC, last_updated DESC
-                LIMIT @Limit",
-                new { Limit = limit });
-
-            return results.ToArray();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting top victims");
-            return Array.Empty<PoopRecord>();
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    public async Task IncrementPoopCountAsync(ulong steamId, string playerName)
-    {
-        try
-        {
-            await _semaphore.WaitAsync();
-
-            var connection = await GetConnectionAsync();
-            await connection.ExecuteAsync(@"
-                INSERT INTO poop_stats (steam_id, name, poop_count, victim_count) 
-                VALUES (@SteamId, @Name, 1, 0)
-                ON DUPLICATE KEY UPDATE 
-                    poop_count = poop_count + 1,
-                    name = @Name,
-                    last_updated = CURRENT_TIMESTAMP",
-                new { SteamId = steamId, Name = playerName });
-
-            if (_config.DebugMode)
-            {
-                _logger.LogDebug("Incremented poop count for {player} ({steamId})", playerName, steamId);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error incrementing poop count for {steamId}", steamId);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    public async Task IncrementVictimCountAsync(ulong steamId, string playerName)
-    {
-        try
-        {
-            await _semaphore.WaitAsync();
-
-            var connection = await GetConnectionAsync();
-            await connection.ExecuteAsync(@"
-                INSERT INTO poop_stats (steam_id, name, poop_count, victim_count) 
-                VALUES (@SteamId, @Name, 0, 1)
-                ON DUPLICATE KEY UPDATE 
-                    victim_count = victim_count + 1,
-                    name = @Name,
-                    last_updated = CURRENT_TIMESTAMP",
-                new { SteamId = steamId, Name = playerName });
-
-            if (_config.DebugMode)
-            {
-                _logger.LogDebug("Incremented victim count for {player} ({steamId})", playerName, steamId);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error incrementing victim count for {steamId}", steamId);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    public async Task<PoopRecord?> GetPlayerStatsAsync(ulong steamId)
-    {
-        try
-        {
-            await _semaphore.WaitAsync();
-
-            var connection = await GetConnectionAsync();
-            var result = await connection.QueryFirstOrDefaultAsync<PoopRecord>(@"
-                SELECT 
-                    steam_id as SteamId,
-                    name as Name,
-                    poop_count as PoopCount,
-                    victim_count as VictimCount,
-                    last_updated as LastUpdated
-                FROM poop_stats 
-                WHERE steam_id = @SteamId",
-                new { SteamId = steamId });
-
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting player stats for {steamId}", steamId);
-            return null;
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
     public async Task SaveColorPreferenceAsync(ulong steamId, PoopColorPreference preference)
     {
         try
@@ -338,13 +168,14 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
 
             var connection = await GetConnectionAsync();
             await connection.ExecuteAsync(@"
-                INSERT INTO poop_colors (steam_id, red, green, blue, is_rainbow) 
-                VALUES (@SteamId, @Red, @Green, @Blue, @IsRainbow)
+                INSERT INTO poop_colors (steam_id, red, green, blue, is_rainbow, is_random) 
+                VALUES (@SteamId, @Red, @Green, @Blue, @IsRainbow, @IsRandom)
                 ON DUPLICATE KEY UPDATE 
                     red = @Red,
                     green = @Green,
                     blue = @Blue,
                     is_rainbow = @IsRainbow,
+                    is_random = @IsRandom,
                     updated_at = CURRENT_TIMESTAMP",
                 new
                 {
@@ -352,13 +183,14 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                     Red = preference.Red,
                     Green = preference.Green,
                     Blue = preference.Blue,
-                    IsRainbow = preference.IsRainbow
+                    IsRainbow = preference.IsRainbow,
+                    IsRandom = preference.IsRandom
                 });
 
             if (_config.DebugMode)
             {
-                _logger.LogDebug("Saved color preference for {steamId}: RGB({r},{g},{b}) Rainbow={rainbow}",
-                    steamId, preference.Red, preference.Green, preference.Blue, preference.IsRainbow);
+                _logger.LogDebug("Saved color preference for {steamId}: RGB({r},{g},{b}) Rainbow={rainbow} Random={random}",
+                    steamId, preference.Red, preference.Green, preference.Blue, preference.IsRainbow, preference.IsRandom);
             }
         }
         catch (Exception ex)
@@ -383,7 +215,8 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                     red as Red,
                     green as Green,
                     blue as Blue,
-                    is_rainbow as IsRainbow
+                    is_rainbow as IsRainbow,
+                    is_random as IsRandom
                 FROM poop_colors 
                 WHERE steam_id = @SteamId",
                 new { SteamId = steamId });
@@ -394,6 +227,234 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         {
             _logger.LogError(ex, "Error loading color preference for {steamId}", steamId);
             return null;
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public async Task<int> LogPoopAsync(PoopLogRecord record)
+    {
+        try
+        {
+            await _semaphore.WaitAsync();
+
+            var connection = await GetConnectionAsync();
+            var result = await connection.ExecuteScalarAsync<int>(@"
+                INSERT INTO poop_logs (
+                    player_name, player_steamid, target_name, target_steamid,
+                    map_name, poop_size, poop_color_r, poop_color_g, poop_color_b,
+                    is_rainbow, player_x, player_y, player_z, timestamp
+                ) VALUES (
+                    @PlayerName, @PlayerSteamId, @TargetName, @TargetSteamId,
+                    @MapName, @PoopSize, @PoopColorR, @PoopColorG, @PoopColorB,
+                    @IsRainbow, @PlayerX, @PlayerY, @PlayerZ, @Timestamp
+                );
+                SELECT LAST_INSERT_ID();",
+                new
+                {
+                    record.PlayerName,
+                    record.PlayerSteamId,
+                    record.TargetName,
+                    record.TargetSteamId,
+                    record.MapName,
+                    record.PoopSize,
+                    record.PoopColorR,
+                    record.PoopColorG,
+                    record.PoopColorB,
+                    record.IsRainbow,
+                    record.PlayerX,
+                    record.PlayerY,
+                    record.PlayerZ,
+                    record.Timestamp
+                });
+
+            if (_config.DebugMode)
+            {
+                _logger.LogDebug("Logged poop #{id}: {player} -> {target} on {map} (size: {size})",
+                    result, record.PlayerName, record.TargetName ?? "ground", record.MapName, record.PoopSize);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error logging poop for {player}", record.PlayerName);
+            return -1;
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public async Task<PoopLogRecord[]> GetRecentPoopsAsync(int limit = 100, ulong? playerSteamId = null, string? mapName = null)
+    {
+        try
+        {
+            await _semaphore.WaitAsync();
+
+            var connection = await GetConnectionAsync();
+
+            var whereClause = "WHERE 1=1";
+            if (playerSteamId.HasValue)
+            {
+                whereClause += " AND player_steamid = @PlayerSteamId";
+            }
+            if (!string.IsNullOrEmpty(mapName))
+            {
+                whereClause += " AND map_name = @MapName";
+            }
+
+            var query = $@"
+                SELECT 
+                    id as Id,
+                    player_name as PlayerName,
+                    player_steamid as PlayerSteamId,
+                    target_name as TargetName,
+                    target_steamid as TargetSteamId,
+                    map_name as MapName,
+                    poop_size as PoopSize,
+                    poop_color_r as PoopColorR,
+                    poop_color_g as PoopColorG,
+                    poop_color_b as PoopColorB,
+                    is_rainbow as IsRainbow,
+                    player_x as PlayerX,
+                    player_y as PlayerY,
+                    player_z as PlayerZ,
+                    timestamp as Timestamp
+                FROM poop_logs 
+                {whereClause}
+                ORDER BY timestamp DESC
+                LIMIT @Limit";
+
+            var results = await connection.QueryAsync<PoopLogRecord>(query,
+                new
+                {
+                    Limit = limit,
+                    PlayerSteamId = playerSteamId?.ToString(),
+                    MapName = mapName
+                });
+
+            return results.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting recent poops");
+            return Array.Empty<PoopLogRecord>();
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public async Task<int> GetTotalPoopsCountAsync()
+    {
+        try
+        {
+            await _semaphore.WaitAsync();
+
+            var connection = await GetConnectionAsync();
+            var result = await connection.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*) FROM poop_logs");
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting total poops count");
+            return 0;
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public async Task<int> GetVictimPoopCountAsync(string targetSteamId)
+    {
+        try
+        {
+            await _semaphore.WaitAsync();
+
+            var connection = await GetConnectionAsync();
+            var result = await connection.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*) 
+                FROM poop_logs 
+                WHERE target_steamid = @TargetSteamId",
+                new { TargetSteamId = targetSteamId });
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting victim poop count for {steamId}", targetSteamId);
+            return 0;
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public async Task<TopPooperRecord[]> GetTopPoopersAsync(int limit = 10)
+    {
+        try
+        {
+            await _semaphore.WaitAsync();
+
+            var connection = await GetConnectionAsync();
+            var results = await connection.QueryAsync<TopPooperRecord>(@"
+                SELECT 
+                    player_name as Name,
+                    player_steamid as SteamId,
+                    COUNT(*) as PoopCount
+                FROM poop_logs
+                GROUP BY player_steamid, player_name
+                ORDER BY PoopCount DESC
+                LIMIT @Limit",
+                new { Limit = limit });
+
+            return results.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting top poopers");
+            return Array.Empty<TopPooperRecord>();
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public async Task<TopVictimRecord[]> GetTopVictimsAsync(int limit = 10)
+    {
+        try
+        {
+            await _semaphore.WaitAsync();
+
+            var connection = await GetConnectionAsync();
+            var results = await connection.QueryAsync<TopVictimRecord>(@"
+                SELECT 
+                    target_name as Name,
+                    target_steamid as SteamId,
+                    COUNT(*) as VictimCount
+                FROM poop_logs
+                WHERE target_steamid IS NOT NULL
+                GROUP BY target_steamid, target_name
+                ORDER BY VictimCount DESC
+                LIMIT @Limit",
+                new { Limit = limit });
+
+            return results.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting top victims");
+            return Array.Empty<TopVictimRecord>();
         }
         finally
         {
@@ -428,5 +489,10 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         _semaphore.Dispose();
 
         _logger.LogInformation("Database connections disposed");
+    }
+
+    public bool Init()
+    {
+        return true;
     }
 }

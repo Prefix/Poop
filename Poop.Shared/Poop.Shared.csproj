@@ -1,0 +1,52 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <LangVersion>13</LangVersion>
+        <Nullable>enable</Nullable>
+        <AssemblyName>Poop.Shared</AssemblyName>
+        <RootNamespace>Prefix.Poop.Shared</RootNamespace>
+        <Version>1.0</Version>
+        <Copyright>©2025 Prefix</Copyright>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RepositoryUrl>https://github.com/Prefix/Poop</RepositoryUrl>
+        <PlatformTarget>x64</PlatformTarget>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+        <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+        <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>embedded</DebugType>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <BuildDateTime>$([System.DateTime]::Now.ToString("yyyy-MM-dd HH:mm:ss"))</BuildDateTime>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+        <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+        <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>embedded</DebugType>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="obj\**" />
+        <EmbeddedResource Remove="obj\**" />
+        <None Remove="obj\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>BuildTime</_Parameter1>
+            <_Parameter2>$(BuildDateTime)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ModSharp.Sharp.Shared" Version="2.0.4"  PrivateAssets="all" />
+    </ItemGroup>
+
+</Project>

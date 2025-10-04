@@ -1,0 +1,52 @@
+using System.Threading.Tasks;
+using Prefix.Poop.Interfaces;
+using Prefix.Poop.Modules.PoopModule;
+using Prefix.Poop.Shared.Models;
+
+namespace Prefix.Poop.Interfaces.Database;
+
+/// <summary>
+/// Interface for poop database operations
+/// </summary>
+internal interface IPoopDatabase : IModule
+{
+    /// <summary>
+    /// Saves a player's poop color preference
+    /// </summary>
+    Task SaveColorPreferenceAsync(ulong steamId, PoopColorPreference preference);
+
+    /// <summary>
+    /// Loads a player's poop color preference
+    /// </summary>
+    Task<PoopColorPreference?> LoadColorPreferenceAsync(ulong steamId);
+
+    /// <summary>
+    /// Logs an individual poop placement event with full details
+    /// </summary>
+    Task<int> LogPoopAsync(PoopLogRecord record);
+
+    /// <summary>
+    /// Gets recent poop logs with optional filters
+    /// </summary>
+    Task<PoopLogRecord[]> GetRecentPoopsAsync(int limit = 100, ulong? playerSteamId = null, string? mapName = null);
+
+    /// <summary>
+    /// Gets the total number of poops logged
+    /// </summary>
+    Task<int> GetTotalPoopsCountAsync();
+
+    /// <summary>
+    /// Gets the number of times a player has been pooped on (victim count from poop_logs)
+    /// </summary>
+    Task<int> GetVictimPoopCountAsync(string targetSteamId);
+
+    /// <summary>
+    /// Gets top poopers (players who placed the most poops) from poop_logs
+    /// </summary>
+    Task<TopPooperRecord[]> GetTopPoopersAsync(int limit = 10);
+
+    /// <summary>
+    /// Gets top victims (players who were pooped on the most) from poop_logs
+    /// </summary>
+    Task<TopVictimRecord[]> GetTopVictimsAsync(int limit = 10);
+}

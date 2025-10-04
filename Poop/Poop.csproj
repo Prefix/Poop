@@ -58,10 +58,13 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\PoopAPI\PoopAPI.csproj" Private="false" ExcludeAssets="runtime" />
+      <ProjectReference Include="..\Poop.Shared\Poop.Shared.csproj" Private="false" ExcludeAssets="runtime" />
     </ItemGroup>
 
     <ItemGroup>
+      <Reference Include="Microsoft.Extensions.Hosting.Abstractions">
+        <HintPath>C:\Users\prefi\.nuget\packages\microsoft.extensions.hosting.abstractions\8.0.0\lib\net8.0\Microsoft.Extensions.Hosting.Abstractions.dll</HintPath>
+      </Reference>
       <Reference Include="MySqlConnector">
         <HintPath>C:\Users\prefi\.nuget\packages\mysqlconnector\2.4.0\lib\net8.0\MySqlConnector.dll</HintPath>
       </Reference>

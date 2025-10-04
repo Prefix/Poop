@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Prefix.Poop.Interfaces;
+using Prefix.Poop.Interfaces.Managers;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared.Hooks;
 
@@ -9,7 +10,7 @@ namespace Prefix.Poop.Managers.Hook;
 internal class HookManager : IHookManager, IManager
 {
     private readonly ILogger<HookManager> _logger;
-    private readonly InterfaceBridge      _bridge;
+    private readonly InterfaceBridge _bridge;
 
     private readonly List<INativeHook> _hooks;
 
@@ -88,21 +89,21 @@ internal class HookManager : IHookManager, IManager
     private sealed class VirtualHook : INativeVirtualHook
     {
         private readonly IVirtualHook _hook;
-        private readonly string       _module;
-        private readonly string       _class;
-        private readonly string       _function;
-        private readonly nint         _detour;
+        private readonly string _module;
+        private readonly string _class;
+        private readonly string _function;
+        private readonly nint _detour;
 
         private bool _installed;
         private bool _disposed;
 
         public VirtualHook(IVirtualHook hook, string module, string @class, string function, nint detour)
         {
-            _hook     = hook;
-            _module   = module;
-            _class    = @class;
+            _hook = hook;
+            _module = module;
+            _class = @class;
             _function = function;
-            _detour   = detour;
+            _detour = detour;
         }
 
         public bool IsAvailable()
@@ -149,17 +150,17 @@ internal class HookManager : IHookManager, IManager
     private sealed class DetourHook : INativeDetourHook
     {
         private readonly IDetourHook _hook;
-        private readonly nint        _address;
-        private readonly nint        _detour;
+        private readonly nint _address;
+        private readonly nint _detour;
 
         private bool _installed;
         private bool _disposed;
 
         public DetourHook(IDetourHook hook, nint address, nint detour)
         {
-            _hook    = hook;
+            _hook = hook;
             _address = address;
-            _detour  = detour;
+            _detour = detour;
         }
 
         public bool IsAvailable()
@@ -205,17 +206,17 @@ internal class HookManager : IHookManager, IManager
     private sealed class MidFuncHook : INativeMidFuncHook
     {
         private readonly IMidFuncHook _hook;
-        private readonly nint         _address;
-        private readonly nint         _detour;
+        private readonly nint _address;
+        private readonly nint _detour;
 
         private bool _installed;
         private bool _disposed;
 
         public MidFuncHook(IMidFuncHook hook, nint address, nint detour)
         {
-            _hook    = hook;
+            _hook = hook;
             _address = address;
-            _detour  = detour;
+            _detour = detour;
         }
 
         public bool IsAvailable()

@@ -1,22 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
+using Prefix.Poop.Shared.Models;
+using Sharp.Shared.Types;
+using Vector = Sharp.Shared.Types.Vector;
 
 namespace Prefix.Poop.Modules.PoopModule;
 
 /// <summary>
 /// Stores information about a dead player for poop placement
 /// </summary>
-internal sealed class DeadPlayerInfo
+public sealed class DeadPlayerInfo
 {
-    public Vector3 Position { get; }
+    public Vector Position { get; }
     public string PlayerName { get; }
+    public string? SteamId { get; }
     public DateTime DeathTime { get; }
 
-    public DeadPlayerInfo(Vector3 position, string playerName)
+    public DeadPlayerInfo(Vector position, string playerName, string? steamId = null)
     {
         Position = position;
         PlayerName = playerName;
+        SteamId = steamId;
         DeathTime = DateTime.UtcNow;
     }
 }
@@ -62,41 +66,45 @@ internal sealed class PoopSizeConfig
 }
 
 /// <summary>
-/// Represents a player's poop color preference
+/// Database record for individual poop placements (full event log)
 /// </summary>
-internal sealed class PoopColorPreference
+internal sealed class PoopLogRecord
 {
-    public int Red { get; set; } = 139;
-    public int Green { get; set; } = 69;
-    public int Blue { get; set; } = 19;
+    public int Id { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public string PlayerSteamId { get; set; } = string.Empty;
+    public string? TargetName { get; set; }
+    public string? TargetSteamId { get; set; }
+    public string MapName { get; set; } = string.Empty;
+    public float PoopSize { get; set; }
+    public int PoopColorR { get; set; }
+    public int PoopColorG { get; set; }
+    public int PoopColorB { get; set; }
     public bool IsRainbow { get; set; }
-
-    public PoopColorPreference()
-    {
-    }
-
-    public PoopColorPreference(int red, int green, int blue, bool isRainbow = false)
-    {
-        Red = Math.Clamp(red, 0, 255);
-        Green = Math.Clamp(green, 0, 255);
-        Blue = Math.Clamp(blue, 0, 255);
-        IsRainbow = isRainbow;
-    }
-
-    public string ToColorString()
-        => $"rgb({Red}, {Green}, {Blue})";
+    public float PlayerX { get; set; }
+    public float PlayerY { get; set; }
+    public float PlayerZ { get; set; }
+    public DateTime Timestamp { get; set; }
 }
 
 /// <summary>
-/// Database record for poop statistics
+/// Top pooper record (aggregated from poop_logs)
 /// </summary>
-internal sealed class PoopRecord
+internal sealed class TopPooperRecord
 {
-    public ulong SteamId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string SteamId { get; set; } = string.Empty;
     public int PoopCount { get; set; }
+}
+
+/// <summary>
+/// Top victim record (aggregated from poop_logs)
+/// </summary>
+internal sealed class TopVictimRecord
+{
+    public string Name { get; set; } = string.Empty;
+    public string SteamId { get; set; } = string.Empty;
     public int VictimCount { get; set; }
-    public DateTime LastUpdated { get; set; }
 }
 
 /// <summary>
