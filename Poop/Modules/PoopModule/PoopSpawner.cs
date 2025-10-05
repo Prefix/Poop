@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Prefix.Poop.Extensions;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Modules;
 using Prefix.Poop.Interfaces.Modules.Player;

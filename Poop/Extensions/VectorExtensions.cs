@@ -1,7 +1,7 @@
 using System;
 using Vector = Sharp.Shared.Types.Vector;
 
-namespace Prefix.Poop.Utils;
+namespace Prefix.Poop.Extensions;
 
 public static class VectorExtensions
 {

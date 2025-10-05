@@ -1,7 +1,8 @@
+using Prefix.Poop.Utils;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
 
-namespace Prefix.Poop.Utils;
+namespace Prefix.Poop.Extensions;
 
 /// <summary>
 /// Extension methods for IPlayerController to simplify chat/console printing

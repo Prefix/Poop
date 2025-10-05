@@ -9,6 +9,7 @@ using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Shared;
 using Prefix.Poop.Shared.Models;
 using Prefix.Poop.Utils;
+using Prefix.Poop.Extensions;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Sharp.Shared.Enums;
