@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Prefix.Poop.Modules.PoopModule;
+using Prefix.Poop.Shared.Models;
 using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Interfaces.Managers;
@@ -75,6 +76,11 @@ internal interface IConfigManager : IManager
     /// Enable player color preferences
     /// </summary>
     bool EnableColorPreferences { get; }
+
+    /// <summary>
+    /// Dictionary of available color options (name -> preference)
+    /// </summary>
+    Dictionary<string, PoopColorPreference> AvailableColors { get; }
 
     /// <summary>
     /// Gets the default poop color as RGB tuple

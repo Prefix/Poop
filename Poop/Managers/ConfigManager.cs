@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.Managers;
+using Prefix.Poop.Models;
 using Prefix.Poop.Modules.PoopModule;
+using Prefix.Poop.Shared.Models;
 using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Managers;
@@ -44,6 +47,7 @@ internal sealed class ConfigManager : IConfigManager
     public float RainbowAnimationSpeed { get; }
     public string DefaultPoopColor { get; }
     public bool EnableColorPreferences { get; }
+    public Dictionary<string, PoopColorPreference> AvailableColors { get; }
 
     // Sound Settings
     public bool EnableSounds { get; }
@@ -151,6 +155,14 @@ internal sealed class ConfigManager : IConfigManager
         RainbowAnimationSpeed = colorConfig.GetValue("RainbowAnimationSpeed", 2.0f);
         DefaultPoopColor = colorConfig.GetValue("DefaultPoopColor", "139,69,19");
         EnableColorPreferences = colorConfig.GetValue("EnableColorPreferences", true);
+
+        // Load available colors from config with fallback to defaults
+        var colorDefinitions = colorConfig.GetSection("AvailableColors").Get<List<PoopColorDefinition>>() ?? GetDefaultColorDefinitions();
+        AvailableColors = colorDefinitions.ToDictionary(
+            c => c.LocaleKey,
+            c => c.ToPreference(),
+            StringComparer.OrdinalIgnoreCase
+        );
 
         // Sound configuration
         var soundConfig = poopModule.GetSection("Sound");
@@ -341,6 +353,33 @@ internal sealed class ConfigManager : IConfigManager
                 _logger.LogWarning("GenerationTiers total chance is {total}%, should sum to 100%", totalChance);
             }
         }
+    }
+
+    /// <summary>
+    /// Provides default color definitions if not specified in config
+    /// </summary>
+    private static List<PoopColorDefinition> GetDefaultColorDefinitions()
+    {
+        return
+        [
+            new() { LocaleKey = "color.brown_default", Red = 139, Green = 69, Blue = 19, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.white", Red = 255, Green = 255, Blue = 255, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.black", Red = 0, Green = 0, Blue = 0, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.red", Red = 255, Green = 0, Blue = 0, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.green", Red = 0, Green = 255, Blue = 0, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.blue", Red = 0, Green = 0, Blue = 255, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.yellow", Red = 255, Green = 255, Blue = 0, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.purple", Red = 128, Green = 0, Blue = 128, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.orange", Red = 255, Green = 165, Blue = 0, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.pink", Red = 255, Green = 105, Blue = 180, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.cyan", Red = 0, Green = 255, Blue = 255, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.gold", Red = 255, Green = 215, Blue = 0, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.lime", Red = 0, Green = 255, Blue = 0, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.magenta", Red = 255, Green = 0, Blue = 255, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.silver", Red = 192, Green = 192, Blue = 192, IsRainbow = false, IsRandom = false },
+            new() { LocaleKey = "color.rainbow", Red = 255, Green = 0, Blue = 0, IsRainbow = true, IsRandom = false },
+            new() { LocaleKey = "color.random", Red = 0, Green = 0, Blue = 0, IsRainbow = false, IsRandom = true }
+        ];
     }
 
     public bool Init()

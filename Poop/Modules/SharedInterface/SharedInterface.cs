@@ -3,14 +3,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using Prefix.Poop.Interfaces;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules;
 using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Shared;
 using Prefix.Poop.Shared.Events;
 using Prefix.Poop.Shared.Models;
+using Prefix.Poop.Utils;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.Managers.Player;
-using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;
 using Sharp.Shared.Types;
 using Sharp.Shared.Units;
@@ -28,8 +27,7 @@ internal sealed class SharedInterface(
     IPoopSpawner spawner,
     IPlayerManager playerManager,
     IPoopPlayerManager poopPlayerManager,
-    IConfigManager config,
-    IPoopColorMenu colorMenu)
+    IConfigManager config)
     : IModule, IPoopShared
 {
     public bool Init()
@@ -149,7 +147,7 @@ internal sealed class SharedInterface(
         // Handle random mode
         if (effectiveColor.IsRandom)
         {
-            effectiveColor = colorMenu.GetRandomColor();
+            effectiveColor = ColorUtils.GetRandomColor(config.AvailableColors);
         }
 
         // Use the full logic method - it handles position and victim internally

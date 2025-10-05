@@ -3,7 +3,7 @@ using Prefix.Poop.Interfaces.Managers.Player;
 using Prefix.Poop.Shared.Models;
 using Sharp.Shared.Units;
 
-namespace Prefix.Poop.Interfaces.PoopModule;
+namespace Prefix.Poop.Interfaces.Modules.PoopModule;
 
 /// <summary>
 /// Interface for handling poop color selection menu and player color preferences
@@ -14,7 +14,7 @@ internal interface IPoopColorMenu : IModule
     /// Opens the color selection menu for a player
     /// </summary>
     /// <param name="player">The player to show the menu to</param>
-    Task OpenColorMenuAsync(IGamePlayer player);
+    void OpenColorMenu(IGamePlayer player);
 
     /// <summary>
     /// Gets a player's color preference (delegates to PoopPlayerManager)
@@ -22,10 +22,4 @@ internal interface IPoopColorMenu : IModule
     /// <param name="steamId">Player's Steam ID</param>
     /// <returns>The player's color preference or default brown</returns>
     Task<PoopColorPreference> GetPlayerColorPreferenceAsync(SteamID steamId);
-
-    /// <summary>
-    /// Gets a random color from the available colors (excluding Rainbow and Random)
-    /// </summary>
-    /// <returns>A random color preference</returns>
-    PoopColorPreference GetRandomColor();
 }

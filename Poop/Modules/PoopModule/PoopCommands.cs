@@ -4,7 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Prefix.Poop.Interfaces;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
+using Prefix.Poop.Interfaces.Modules.PoopModule;
 using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Shared;
 using Prefix.Poop.Shared.Models;
@@ -13,6 +14,7 @@ using Prefix.Poop.Extensions;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Sharp.Shared.Enums;
+using Sharp.Shared.Objects;
 using Sharp.Shared.Types;
 
 namespace Prefix.Poop.Modules.PoopModule;
@@ -289,19 +291,18 @@ internal sealed class PoopCommands : IModule
     {
         _logger.LogInformation("{player} executed poopcolor command", player.Name);
 
-        // Wrap async call in fire-and-forget pattern
-        _ = OnPoopColorCommandAsync(player);
+        OpenColorMenuForPlayer(player);
         return ECommandAction.Handled;
     }
 
     /// <summary>
-    /// Async implementation of color command
+    /// Opens the color menu for a player
     /// </summary>
-    private async Task OnPoopColorCommandAsync(IGamePlayer player)
+    private void OpenColorMenuForPlayer(IGamePlayer player)
     {
         try
         {
-            await _colorMenu.OpenColorMenuAsync(player);
+            _colorMenu.OpenColorMenu(player);
         }
         catch (Exception ex)
         {
@@ -327,15 +328,14 @@ internal sealed class PoopCommands : IModule
             }
         }
 
-        // Wrap async call in a fire-and-forget pattern
-        _ = OnPoopCommandAsync(player);
+        SpawnPoopForPlayer(player);
         return ECommandAction.Handled;
     }
 
     /// <summary>
-    /// Async implementation of poop command
+    /// Spawns a poop for the player
     /// </summary>
-    private ECommandAction OnPoopCommandAsync(IGamePlayer player)
+    private void SpawnPoopForPlayer(IGamePlayer player)
     {
         _logger.LogInformation("{player} executed poop command", player.Name);
 
@@ -346,14 +346,14 @@ internal sealed class PoopCommands : IModule
             if (controller == null)
             {
                 _logger.LogWarning("Could not find controller for player {player} (slot {slot})", player.Name, player.Slot);
-                return ECommandAction.Handled;
+                return;
             }
 
             var pawn = controller.GetPlayerPawn();
             if (pawn == null || !pawn.IsValid())
             {
                 controller.PrintToChat(_locale.GetString("poop.must_be_alive"));
-                return ECommandAction.Handled;
+                return;
             }
 
             if (!_cooldowns.CanExecute("poop", player.Client))
@@ -363,21 +363,21 @@ internal sealed class PoopCommands : IModule
                 {
                     ["remaining"] = remaining
                 }));
-                return ECommandAction.Handled;
+                return;
             }
 
             // 3. Check max poops per round limit
             if (_lifecycleManager.HasReachedMaxPoopsPerRound())
             {
                 controller.PrintToChat(_locale.GetString("poop.max_per_round"));
-                return ECommandAction.Handled;
+                return;
             }
 
             // 4. Check if player is on the ground
             if (!pawn.Flags.HasFlag(EntityFlags.OnGround))
             {
                 controller.PrintToChat(_locale.GetString("poop.must_be_on_ground"));
-                return ECommandAction.Handled;
+                return;
             }
 
             // 5. Get player position
@@ -390,56 +390,25 @@ internal sealed class PoopCommands : IModule
             // Check if color preferences are enabled
             if (_config.EnableColorPreferences)
             {
-                // Capture variables for closure
-                var playerClient = player.Client;
-                var playerName = player.Name;
-                
-                // Run color preference fetch on background thread (may hit database)
-                Task.Run(async () =>
+                // Get color preference from cache (preloaded on connect)
+                var colorPref = _poopPlayerManager.GetColorPreference(player.Client.SteamId);
+
+                // If random mode, get a random color each time
+                if (colorPref.IsRandom)
                 {
-                    try
-                    {
-                        var colorPref = await _poopPlayerManager.GetColorPreferenceAsync(playerClient.SteamId);
+                    colorPref = ColorUtils.GetRandomColor(_config.AvailableColors);
+                }
 
-                        // If random mode, get a random color each time
-                        if (colorPref.IsRandom)
-                        {
-                            colorPref = _colorMenu.GetRandomColor();
-                        }
-
-                        // Marshal back to main thread to spawn poop
-                        await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                        {
-                            _spawner.SpawnPoopWithFullLogic(
-                                playerClient,
-                                size: -1.0f,
-                                colorPref,
-                                playSounds: true,
-                                showMessages: true);
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error getting color preference for {player}, using default", playerName);
-                        // Use default color on error
-                        var (r, g, b) = _config.GetDefaultColorRgb();
-                        var defaultColorPref = new PoopColorPreference(r, g, b);
-                        
-                        await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                        {
-                            _spawner.SpawnPoopWithFullLogic(
-                                playerClient,
-                                size: -1.0f,
-                                defaultColorPref,
-                                playSounds: true,
-                                showMessages: true);
-                        });
-                    }
-                });
+                _spawner.SpawnPoopWithFullLogic(
+                    player.Client,
+                    size: -1.0f,
+                    colorPref,
+                    playSounds: true,
+                    showMessages: true);
             }
             else
             {
-                // Use default color when preferences are disabled (synchronous, no database call)
+                // Use default color when preferences are disabled
                 var (r, g, b) = _config.GetDefaultColorRgb();
                 var colorPref = new PoopColorPreference(r, g, b);
                 _spawner.SpawnPoopWithFullLogic(
@@ -455,8 +424,6 @@ internal sealed class PoopCommands : IModule
             _logger.LogError(ex, "Error in OnPoopCommand for {player}", player.Name);
             player.Client.ConsolePrint($"{_config.ChatPrefix} An error occurred while spawning poop.");
         }
-
-        return ECommandAction.Handled;
     }
 
     /// <summary>

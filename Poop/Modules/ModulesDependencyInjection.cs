@@ -7,6 +7,7 @@ using Prefix.Poop.Modules.PoopPlayer;
 using Prefix.Poop.Modules.PoopModule.Lifecycle;
 using Prefix.Poop.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Prefix.Poop.Interfaces.Modules.PoopModule;
 using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Prefix.Poop.Shared;
 using IRagdollTracker = Prefix.Poop.Interfaces.PoopModule.Lifecycle.IRagdollTracker;
