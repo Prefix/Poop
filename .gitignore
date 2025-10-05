@@ -86,7 +86,6 @@ StyleCopReport.xml
 *.log
 *.vspscc
 *.vssscc
-.builds
 *.pidb
 *.svclog
 *.scc
@@ -364,7 +363,9 @@ Temporary Items
 .apdisk
 
 # Build
-.build
+.build/gamedata
+.build/shared
+.build/modules
 /PoopCSSharp
 /CounterStrikeSharp-main
 /Stubs
