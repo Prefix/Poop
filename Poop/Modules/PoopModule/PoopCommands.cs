@@ -581,7 +581,7 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private int RegisterCommandGroup(
         CommandConfig config,
-        Func<IGamePlayer, StringCommand, ECommandAction> handler,
+        ICommandManager.ClientCommandDelegate handler,
         string commandGroupName)
     {
         if (!config.Enabled)

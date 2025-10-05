@@ -83,32 +83,40 @@ public sealed class PoopExample : IModSharpModule
     {
         _logger.LogInformation("All modules loaded - attempting to connect to Poop API...");
 
-        // Get the Poop API interface wrapper
-        var manager = _shared.GetSharpModuleManager();
-        var poopInterface = manager.GetOptionalSharpModuleInterface<IPoopShared>(IPoopShared.Identity);
-        
-        if (poopInterface == null)
+        try
         {
-            _logger.LogError("Could not find Poop plugin! Make sure Poop.dll is loaded.");
-            return;
-        }
+            // Get the Poop API interface wrapper
+            var manager = _shared.GetSharpModuleManager();
+            var poopInterface = manager.GetRequiredSharpModuleInterface<IPoopShared>(IPoopShared.Identity);
+            
+            if (poopInterface == null)
+            {
+                _logger.LogError("Could not find Poop plugin! Make sure Poop.dll is loaded.");
+                return;
+            }
 
-        // Get the actual instance from the wrapper
-        _poopApi = poopInterface.Instance;
-        
-        if (_poopApi == null)
+            // Get the actual instance from the wrapper
+            _poopApi = poopInterface.Instance;
+            
+            if (_poopApi == null)
+            {
+                _logger.LogWarning("Poop API instance is not available!");
+                return;
+            }
+
+            _logger.LogInformation("Successfully connected to Poop API!");
+
+            // Subscribe to events
+            _poopApi.OnPoopSpawned += OnPoopSpawned;
+            _poopApi.OnPoopCommand += OnPoopCommand;
+
+            _logger.LogInformation("Subscribed to Poop events!");
+        }
+        catch (Exception ex)
         {
-            _logger.LogWarning("Poop API instance is not available!");
-            return;
+            _logger.LogError(ex, "Failed to initialize Poop API connection");
+            _poopApi = null;
         }
-
-        _logger.LogInformation("Successfully connected to Poop API!");
-
-        // Subscribe to events
-        _poopApi.OnPoopSpawned += OnPoopSpawned;
-        _poopApi.OnPoopCommand += OnPoopCommand;
-
-        _logger.LogInformation("Subscribed to Poop events!");
     }
 
     #region Commands
