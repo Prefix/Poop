@@ -7,39 +7,26 @@ namespace Prefix.Poop.Modules.FlashingHtmlHudFix;
 internal sealed class FlashingHtmlHudFixModule : IModule
 {
     private readonly InterfaceBridge _bridge;
-    private readonly IGameListenerManager _gameListener;
-
-    private IGameRules? _gameRules;
 
     public FlashingHtmlHudFixModule(
-        InterfaceBridge bridge,
-        IGameListenerManager gameListener)
+        InterfaceBridge bridge)
     {
         _bridge = bridge;
-        _gameListener = gameListener;
-        _gameListener.GameInit += OnGameInit;
     }
 
     public bool Init()
     {
+        _bridge.ModSharp.InstallGameFrameHook(pre: null, post: OnGameFramePre);
         return true;
     }
 
     public void Shutdown()
     {
         _bridge.ModSharp.RemoveGameFrameHook(pre: null, post: OnGameFramePre);
-        _gameListener.GameInit -= OnGameInit;
-    }
-
-    private void OnGameInit()
-    {
-        _gameRules = null;
-        _bridge.ModSharp.InstallGameFrameHook(pre: null, post: OnGameFramePre);
     }
 
     private void OnGameFramePre(bool simulating, bool firstTick, bool lastTick)
     {
-        _gameRules = _bridge.ModSharp.GetGameRules();
-        _gameRules.IsGameRestart = _gameRules.RestartRoundTime == 0.0f;
+        _bridge.ModSharp.GetGameRules().IsGameRestart = _bridge.ModSharp.GetGameRules().RestartRoundTime == 0.0f;
     }
 }
