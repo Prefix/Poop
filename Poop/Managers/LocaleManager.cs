@@ -300,12 +300,6 @@ internal sealed class LocaleManager : ILocaleManager
             { "size.huge", "huge" },
             { "size.massive", "MASSIVE" },
 
-            // Poop Size Command
-            { "size.usage", "{yellow}Usage: !poop_size <size>" },
-            { "size.range", "{yellow}Size must be between {0:F2} and {1:F2}" },
-            { "size.invalid_format", "{red}Invalid size format. Use a number between {0:F2} and {1:F2}" },
-            { "size.clamped", "{yellow}Size clamped from {0:F3} to {1:F3}" },
-
             // Color Commands
             { "color.disabled", "{red}Color preferences are currently disabled." },
             { "color.menu_error", "{red}Error opening color menu! Please try again." },
