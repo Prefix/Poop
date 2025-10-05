@@ -129,7 +129,7 @@ public sealed class PoopExample : IModSharpModule
     {
         if (_poopApi == null)
         {
-            client.ConsolePrint("Poop API is not available!");
+            PrintToChat(client, "Poop API is not available!");
             return ECommandAction.Stopped;
         }
 
@@ -147,17 +147,17 @@ public sealed class PoopExample : IModSharpModule
 
             if (result != null)
             {
-                client.ConsolePrint($"Forced poop spawned! Size: {result.Size:F3}");
+                PrintToChat(client, $"Forced poop spawned! Size: {result.Size:F3}");
             }
             else
             {
-                client.ConsolePrint("Failed to spawn poop!");
+                PrintToChat(client, "Failed to spawn poop!");
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error forcing poop for {player}", client.Name);
-            client.ConsolePrint("An error occurred!");
+            PrintToChat(client, "An error occurred!");
         }
 
         return ECommandAction.Stopped;
@@ -171,7 +171,7 @@ public sealed class PoopExample : IModSharpModule
     {
         if (_poopApi == null)
         {
-            client.ConsolePrint("Poop API is not available!");
+            PrintToChat(client, "Poop API is not available!");
             return ECommandAction.Stopped;
         }
 
@@ -189,16 +189,16 @@ public sealed class PoopExample : IModSharpModule
                     // Schedule response on main thread
                     await _shared.GetModSharp().InvokeFrameActionAsync(() =>
                     {
-                        client.ConsolePrint($"=== Your Poop Stats ===");
-                        client.ConsolePrint($"Poops Placed: {stats.PoopsPlaced}");
-                        client.ConsolePrint($"Times Pooped On: {stats.TimesPoopedOn}");
+                        PrintToChat(client, $"=== Your Poop Stats ===");
+                        PrintToChat(client, $"Poops Placed: {stats.PoopsPlaced}");
+                        PrintToChat(client, $"Times Pooped On: {stats.TimesPoopedOn}");
                     });
                 }
                 else
                 {
                     await _shared.GetModSharp().InvokeFrameActionAsync(() =>
                     {
-                        client.ConsolePrint("No poop statistics found!");
+                        PrintToChat(client, "No poop statistics found!");
                     });
                 }
             }
@@ -219,7 +219,7 @@ public sealed class PoopExample : IModSharpModule
     {
         if (_poopApi == null)
         {
-            client.ConsolePrint("Poop API is not available!");
+            PrintToChat(client, "Poop API is not available!");
             return ECommandAction.Stopped;
         }
 
@@ -245,7 +245,7 @@ public sealed class PoopExample : IModSharpModule
 
             if (result != null)
             {
-                client.ConsolePrint($"Random poop spawned! RGB({randomColor.Red},{randomColor.Green},{randomColor.Blue}) Size: {result.Size:F3}");
+                PrintToChat(client, $"Random poop spawned! RGB({randomColor.Red},{randomColor.Green},{randomColor.Blue}) Size: {result.Size:F3}");
             }
         }
         catch (Exception ex)
@@ -264,7 +264,7 @@ public sealed class PoopExample : IModSharpModule
     {
         if (_poopApi == null)
         {
-            client.ConsolePrint("Poop API is not available!");
+            PrintToChat(client, "Poop API is not available!");
             return ECommandAction.Stopped;
         }
 
@@ -284,7 +284,7 @@ public sealed class PoopExample : IModSharpModule
 
             if (result != null)
             {
-                client.ConsolePrint($"MASSIVE GOLDEN POOP SPAWNED! Size: {result.Size:F3}");
+                PrintToChat(client, $"MASSIVE GOLDEN POOP SPAWNED! Size: {result.Size:F3}");
             }
         }
         catch (Exception ex)
@@ -293,6 +293,34 @@ public sealed class PoopExample : IModSharpModule
         }
 
         return ECommandAction.Stopped;
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Helper method to send a chat message to a player
+    /// </summary>
+    private void PrintToChat(IGameClient client, string message)
+    {
+        try
+        {
+            var entityManager = _shared.GetEntityManager();
+            var controller = entityManager.FindPlayerControllerBySlot(client.Slot);
+            if (controller == null)
+            {
+                _logger.LogWarning("Could not find controller for player {player}", client.Name);
+                return;
+            }
+            controller.Print(HudPrintChannel.Chat, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error printing to chat for {player}", client.Name);
+            // Fallback to console if chat fails
+            PrintToChat(client, message);
+        }
     }
 
     #endregion
@@ -341,9 +369,9 @@ public sealed class PoopExample : IModSharpModule
         // You could check player permissions, game state, etc.
         if (args.CommandName.Equals("poopcolor", StringComparison.OrdinalIgnoreCase))
         {
-            // Example: Block the "poop" command only
+            // Example: Block the "poopcolor" command and notify via chat
             args.Cancel = true;
-            args.Player.ConsolePrint("The poop command is currently disabled.");
+            PrintToChat(args.Player, "The poop color command is currently disabled.");
             return;
         }
         // Uncomment to block:
