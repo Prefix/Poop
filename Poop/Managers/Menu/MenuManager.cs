@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
-using Prefix.Poop.Interfaces;
+using Prefix.Poop.Extensions;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Managers.Player;
 using Sharp.Shared.Enums;
@@ -10,8 +10,7 @@ namespace Prefix.Poop.Managers.Menu;
 internal class MenuManager(
     InterfaceBridge bridge,
     ILogger<MenuManager> logger,
-    ICommandManager commandManager,
-    IEventManager eventManager) : IManager, IMenuManager
+    ICommandManager commandManager) : IMenuManager
 {
     private readonly Dictionary<int, IMenuInstance> _activeMenus = new();
 
@@ -32,7 +31,7 @@ internal class MenuManager(
                 var controller = bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
                 if (controller is { ConnectedState: PlayerConnectedState.PlayerConnected })
                 {
-                    eventManager.PrintToCenterHtml(controller, " ", 1);
+                    controller.PrintToCenterHtml(" ", 1);
                 }
             }
         }
@@ -44,7 +43,7 @@ internal class MenuManager(
     {
         CloseActiveMenu(player);
 
-        var instance = new CenterHtmlMenuInstance(bridge, eventManager, player, menu);
+        var instance = new CenterHtmlMenuInstance(bridge, player, menu);
         _activeMenus[player.Slot] = instance;
         instance.Display();
     }

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
+using Prefix.Poop.Extensions;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Managers.Player;
 using Prefix.Poop.Interfaces.Modules;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEvents;
@@ -20,17 +20,14 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker
     private readonly Dictionary<IGameClient, DeadPlayerInfo> _deadPlayers = new();
 
     public IReadOnlyDictionary<IGameClient, DeadPlayerInfo> DeadPlayers => _deadPlayers;
-    private readonly IPlayerManager _playerManager;
     private readonly IClientListenerManager _clientListenerManager;
 
     public DeadPlayerTracker(
         ILogger<DeadPlayerTracker> logger,
         IEventManager eventManager,
-        IClientListenerManager clientListenerManager,
-        IPlayerManager playerManager)
+        IClientListenerManager clientListenerManager)
     {
         _logger = logger;
-        _playerManager = playerManager;
         _clientListenerManager = clientListenerManager;
 
         // Register event listeners
@@ -86,7 +83,7 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker
             {
                 var vec = pawn.GetAbsOrigin();
 
-                IGameClient? gameClient = _playerManager.GetPlayer(victim.PlayerSlot)?.Client;
+                IGameClient? gameClient = victim.GetGameClient();
                 if (gameClient == null)
                 {
                     _logger.LogDebug("Player death event: could not find game client for slot {slot}", victim.PlayerSlot);

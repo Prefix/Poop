@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Prefix.Poop.Interfaces;
+using Prefix.Poop.Extensions;
 using Prefix.Poop.Interfaces.Managers;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared.Enums;
@@ -12,12 +12,16 @@ namespace Prefix.Poop.Managers.Event;
 
 internal class EventManager(InterfaceBridge bridge, ILogger<EventManager> logger) : IEventManager, IEventListener
 {
+    public static EventManager Instance { get; private set; } = null!;
+    
     private readonly Dictionary<string, IEventManager.DelegateOnEventFired?> _listeners = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HashSet<IEventManager.DelegateOnHookEvent>> _hooks = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _events = new(StringComparer.OrdinalIgnoreCase);
 
     public bool Init()
     {
+        Instance = this;
+        
         bridge.EventManager.InstallEventListener(this);
 
         return true;
@@ -129,7 +133,7 @@ internal class EventManager(InterfaceBridge bridge, ILogger<EventManager> logger
         }
 
         // Get the game client and validate
-        if (bridge.ClientManager.GetGameClient(controller.SteamId) is not
+        if (controller.GetGameClient() is not
             {
                 IsValid: true,
                 IsFakeClient: false

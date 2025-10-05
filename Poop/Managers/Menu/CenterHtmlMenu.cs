@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using Prefix.Poop.Extensions;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Managers.Player;
 using Sharp.Shared.Enums;
@@ -34,7 +35,7 @@ internal class CenterHtmlMenu(string title, IMenuManager menuManager) : BaseMenu
     }
 }
 
-internal class CenterHtmlMenuInstance(InterfaceBridge bridge, IEventManager eventManager, IGamePlayer player, IMenu menu) : BaseMenuInstance(player, menu)
+internal class CenterHtmlMenuInstance(InterfaceBridge bridge,IGamePlayer player, IMenu menu) : BaseMenuInstance(player, menu)
 {
     private Guid? _refreshTimerHandle;
     private Guid? _lifetimeTimerHandle;
@@ -149,7 +150,7 @@ internal class CenterHtmlMenuInstance(InterfaceBridge bridge, IEventManager even
 
         // Send the menu - use MessageDuration for each individual message
         // This should be longer than RefreshInterval to avoid flashing
-        eventManager.PrintToCenterHtml(controller, currentPageText, centerHtmlMenu.MessageDuration);
+        controller.PrintToCenterHtml(currentPageText, centerHtmlMenu.MessageDuration);
 
         return TimerAction.Continue;
     }
@@ -181,7 +182,7 @@ internal class CenterHtmlMenuInstance(InterfaceBridge bridge, IEventManager even
             return;
         }
 
-        eventManager.PrintToCenterHtml(controller, " ", 1);
+        controller.PrintToCenterHtml(" ", 1);
     }
 
     public override void Reset()

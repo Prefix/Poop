@@ -11,6 +11,8 @@ namespace Prefix.Poop;
 
 internal sealed class InterfaceBridge
 {
+    public static InterfaceBridge Instance { get; private set; } = null!;
+    
     public string SharpPath { get; }
     public string RootPath { get; }
     public string DllPath { get; }
@@ -41,6 +43,8 @@ internal sealed class InterfaceBridge
 
     public InterfaceBridge(string dllPath, string sharpPath, Version version, Poop poop, ISharedSystem sharedSystem)
     {
+        Instance = this;
+        
         SharpPath = sharpPath;
         DllPath = dllPath;
         RootPath = Path.GetFullPath(Path.Combine(sharpPath, ".."));
