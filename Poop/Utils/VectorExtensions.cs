@@ -3,10 +3,8 @@ using Vector = Sharp.Shared.Types.Vector;
 
 namespace Prefix.Poop.Utils;
 
-public static class VectorHelper
+public static class VectorExtensions
 {
-    public static readonly Vector VECTOR_ZERO = new Vector(0, 0, 0);
-
     public static Vector Change(this Vector vector, Vector other)
     {
         vector.X = other.X;

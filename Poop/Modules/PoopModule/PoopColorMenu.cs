@@ -4,11 +4,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules;
 using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Managers.Menu;
 using Prefix.Poop.Shared.Models;
 using Prefix.Poop.Utils;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Modules.PoopModule;
 
@@ -71,15 +72,9 @@ internal sealed class PoopColorMenu(
         }
 
         // Parse and validate SteamID
-        if (!ulong.TryParse(player.SteamId, out var steamId))
-        {
-            logger.LogWarning("Invalid SteamID for player {player}: {steamId}", player.Name, player.SteamId);
-            playerController.PrintToChat(locale.GetString("common.invalid_steamid"));
-            return;
-        }
 
         // Load the player's current color preference
-        var currentPref = await poopPlayerManager.GetColorPreferenceAsync(steamId);
+        var currentPref = await poopPlayerManager.GetColorPreferenceAsync(player.Client.SteamId);
 
         var menu = new CenterHtmlMenu("Poop Color Selection", menuManager)
         {
@@ -106,7 +101,7 @@ internal sealed class PoopColorMenu(
                 (p, _) =>
                 {
                     // Fire-and-forget async call with proper error handling
-                    Task.Run(async () => await OnColorSelected(p, steamId, colorName, colorPref));
+                    Task.Run(async () => await OnColorSelected(p, p.Client.SteamId, colorName, colorPref));
                 },
                 disabled: isSelected // Disable currently selected color (can't reselect)
             );
@@ -120,7 +115,7 @@ internal sealed class PoopColorMenu(
     /// </summary>
     private async Task OnColorSelected(
         IGamePlayer player,
-        ulong steamId,
+        SteamID steamId,
         string colorName,
         PoopColorPreference colorPref)
     {
@@ -171,7 +166,7 @@ internal sealed class PoopColorMenu(
     /// <summary>
     /// Gets a player's color preference (delegates to PoopPlayerManager)
     /// </summary>
-    public async Task<PoopColorPreference> GetPlayerColorPreferenceAsync(ulong steamId)
+    public async Task<PoopColorPreference> GetPlayerColorPreferenceAsync(SteamID steamId)
     {
         return await poopPlayerManager.GetColorPreferenceAsync(steamId);
     }

@@ -134,10 +134,6 @@ internal class CommandManager : ICommandManager, IClientListener
         return true;
     }
 
-    public void OnPostInit()
-    {
-    }
-
     public void OnAllSharpModulesLoaded()
     {
     }

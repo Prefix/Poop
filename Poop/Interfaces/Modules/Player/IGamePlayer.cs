@@ -1,5 +1,6 @@
 using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Interfaces.Modules.Player;
 
@@ -21,7 +22,7 @@ public interface IGamePlayer
     /// <summary>
     /// Player's SteamID64
     /// </summary>
-    string SteamId { get; }
+    SteamID SteamId { get; }
 
     /// <summary>
     /// Player's name

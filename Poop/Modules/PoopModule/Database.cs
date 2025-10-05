@@ -4,11 +4,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Prefix.Poop.Interfaces.Database;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Shared.Models;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
+using Prefix.Poop.Interfaces.PoopModule;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Modules.PoopModule;
 
@@ -56,12 +57,9 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
 
             _logger.LogInformation("Database connection established successfully");
 
-            if (_config.DatabaseAutoMigrate)
-            {
-                _logger.LogInformation("Running database migrations...");
-                InitializeDatabase();
-                _logger.LogInformation("Database migrations completed");
-            }
+            _logger.LogInformation("Running database migrations...");
+            InitializeDatabase();
+            _logger.LogInformation("Database migrations completed");
         }
         catch (Exception ex)
         {
@@ -94,20 +92,6 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
             ");
 
             _logger.LogInformation("Table 'poop_colors' created or verified");
-
-            // Add is_random column if it doesn't exist (migration for existing databases)
-            try
-            {
-                _initConnection.Execute(@"
-                    ALTER TABLE poop_colors 
-                    ADD COLUMN IF NOT EXISTS is_random BOOLEAN DEFAULT FALSE AFTER is_rainbow;
-                ");
-                _logger.LogInformation("Migration: 'is_random' column added to poop_colors table");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Column 'is_random' may already exist or migration not needed");
-            }
 
             // Create poop_logs table for detailed poop event logging
             _initConnection.Execute(@"
@@ -160,7 +144,7 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         return _asyncConnection.Value;
     }
 
-    public async Task SaveColorPreferenceAsync(ulong steamId, PoopColorPreference preference)
+    public async Task SaveColorPreferenceAsync(SteamID steamId, PoopColorPreference preference)
     {
         try
         {
@@ -203,7 +187,7 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         }
     }
 
-    public async Task<PoopColorPreference?> LoadColorPreferenceAsync(ulong steamId)
+    public async Task<PoopColorPreference?> LoadColorPreferenceAsync(SteamID steamId)
     {
         try
         {
@@ -289,7 +273,7 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         }
     }
 
-    public async Task<PoopLogRecord[]> GetRecentPoopsAsync(int limit = 100, ulong? playerSteamId = null, string? mapName = null)
+    public async Task<PoopLogRecord[]> GetRecentPoopsAsync(int limit = 100, SteamID? playerSteamId = null, string? mapName = null)
     {
         try
         {
@@ -373,7 +357,7 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         }
     }
 
-    public async Task<int> GetVictimPoopCountAsync(string targetSteamId)
+    public async Task<int> GetVictimPoopCountAsync(SteamID targetSteamId)
     {
         try
         {

@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Prefix.Poop.Interfaces.Database;
-using Prefix.Poop.Interfaces.Modules;
+using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Shared.Models;
 using Sharp.Shared.Enums;
-using Sharp.Shared.Listeners;
 using Sharp.Shared.Objects;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Modules.PoopPlayer;
 
@@ -16,60 +16,48 @@ namespace Prefix.Poop.Modules.PoopPlayer;
 /// Manages player-specific poop data (color preferences, etc.)
 /// Acts as a bridge between PlayerManager and poop-specific features
 /// </summary>
-internal sealed class PoopPlayerManager : IPoopPlayerManager, IClientListener
+internal sealed class PoopPlayerManager(
+    ILogger<PoopPlayerManager> logger,
+    IPoopDatabase database,
+    IClientListenerManager clientListenerManager,
+    IPlayerManager playerManager)
+    : IPoopPlayerManager
 {
-    private readonly ILogger<PoopPlayerManager> _logger;
-    private readonly InterfaceBridge _bridge;
-    private readonly IPoopDatabase _database;
-    private readonly IPlayerManager _playerManager;
-
     // Cache of player color preferences (SteamID -> Preference)
+    // Once loaded, preferences are cached for the entire session
     private readonly Dictionary<ulong, PoopColorPreference> _colorCache = new();
     private readonly object _cacheLock = new();
 
-    public PoopPlayerManager(
-        ILogger<PoopPlayerManager> logger,
-        InterfaceBridge bridge,
-        IPoopDatabase database,
-        IPlayerManager playerManager)
-    {
-        _logger = logger;
-        _bridge = bridge;
-        _database = database;
-        _playerManager = playerManager;
-    }
+    // Track which SteamIDs are currently being loaded to prevent duplicate DB calls
+    private readonly HashSet<ulong> _loadingPreferences = new();
 
     public bool Init()
     {
-        _bridge.ClientManager.InstallClientListener(this);
-        _logger.LogInformation("PoopPlayerManager initialized");
+        clientListenerManager.ClientPutInServer += OnClientPutInServer;
+        clientListenerManager.ClientDisconnected += OnClientDisconnected;
+        logger.LogInformation("PoopPlayerManager initialized");
         return true;
-    }
-
-    public void OnPostInit()
-    {
-    }
-
-    public void OnAllSharpModulesLoaded()
-    {
     }
 
     public void Shutdown()
     {
-        _bridge.ClientManager.RemoveClientListener(this);
+        clientListenerManager.ClientPutInServer -= OnClientPutInServer;
+        clientListenerManager.ClientDisconnected -= OnClientDisconnected;
         lock (_cacheLock)
         {
             _colorCache.Clear();
+            _loadingPreferences.Clear();
         }
-        _logger.LogInformation("PoopPlayerManager shut down");
+        logger.LogInformation("PoopPlayerManager shut down");
     }
 
     #region IPoopPlayerManager Implementation
 
     /// <summary>
     /// Gets a player's color preference (from cache or database)
+    /// Always returns immediately with cached data or default if not yet loaded
     /// </summary>
-    public async Task<PoopColorPreference> GetColorPreferenceAsync(ulong steamId)
+    public async Task<PoopColorPreference> GetColorPreferenceAsync(SteamID steamId)
     {
         // Check cache first
         lock (_cacheLock)
@@ -78,40 +66,80 @@ internal sealed class PoopPlayerManager : IPoopPlayerManager, IClientListener
             {
                 return cached;
             }
+
+            // Check if already loading to prevent duplicate DB calls
+            if (!_loadingPreferences.Add(steamId))
+            {
+                // Return default while loading in background
+                return new PoopColorPreference(139, 69, 19);
+            }
+
+            // Mark as loading
         }
 
         // Load from database
         try
         {
-            var pref = await _database.LoadColorPreferenceAsync(steamId);
+            var pref = await database.LoadColorPreferenceAsync(steamId);
             if (pref != null)
             {
                 lock (_cacheLock)
                 {
                     _colorCache[steamId] = pref;
+                    _loadingPreferences.Remove(steamId);
                 }
                 return pref;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to load color preference for {steamId}, using default", steamId);
+            logger.LogWarning(ex, "Failed to load color preference for {steamId}, using default", steamId);
+            lock (_cacheLock)
+            {
+                _loadingPreferences.Remove(steamId);
+            }
         }
 
         // Return default brown color
         var defaultPref = new PoopColorPreference(139, 69, 19);
+        
+        // Cache the default so we don't keep hitting the DB for players without preferences
+        lock (_cacheLock)
+        {
+            _colorCache[steamId] = defaultPref;
+            _loadingPreferences.Remove(steamId);
+        }
+        
         return defaultPref;
+    }
+
+    /// <summary>
+    /// Gets a player's color preference synchronously from cache only
+    /// Returns default if not cached
+    /// </summary>
+    public PoopColorPreference GetColorPreference(SteamID steamId)
+    {
+        lock (_cacheLock)
+        {
+            if (_colorCache.TryGetValue(steamId, out var cached))
+            {
+                return cached;
+            }
+        }
+
+        // Return default brown color
+        return new PoopColorPreference(139, 69, 19);
     }
 
     /// <summary>
     /// Saves a player's color preference to database and cache
     /// </summary>
-    public async Task SaveColorPreferenceAsync(ulong steamId, PoopColorPreference preference)
+    public async Task SaveColorPreferenceAsync(SteamID steamId, PoopColorPreference preference)
     {
         try
         {
             // Save to database
-            await _database.SaveColorPreferenceAsync(steamId, preference);
+            await database.SaveColorPreferenceAsync(steamId, preference);
 
             // Update cache
             lock (_cacheLock)
@@ -119,34 +147,36 @@ internal sealed class PoopPlayerManager : IPoopPlayerManager, IClientListener
                 _colorCache[steamId] = preference;
             }
 
-            _logger.LogDebug("Saved color preference for {steamId}: RGB({r},{g},{b}) Rainbow={rainbow} Random={random}",
+            logger.LogDebug("Saved color preference for {steamId}: RGB({r},{g},{b}) Rainbow={rainbow} Random={random}",
                 steamId, preference.Red, preference.Green, preference.Blue,
                 preference.IsRainbow, preference.IsRandom);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save color preference for {steamId}", steamId);
+            logger.LogError(ex, "Failed to save color preference for {steamId}", steamId);
             throw;
         }
     }
 
     /// <summary>
     /// Clears cached color preference for a player (e.g., on disconnect)
+    /// Note: Normally called automatically on disconnect via event handler
     /// </summary>
-    public void ClearColorCache(ulong steamId)
+    public void ClearColorCache(SteamID steamId)
     {
         lock (_cacheLock)
         {
             _colorCache.Remove(steamId);
+            _loadingPreferences.Remove(steamId);
         }
     }
 
     /// <summary>
     /// Gets a player by SteamID
     /// </summary>
-    public IGamePlayer? GetPlayerBySteamId(string steamId)
+    public IGamePlayer? GetPlayerBySteamId(SteamID steamId)
     {
-        return _playerManager.GetPlayerBySteamId(steamId);
+        return playerManager.GetPlayerBySteamId(steamId);
     }
 
     /// <summary>
@@ -154,28 +184,18 @@ internal sealed class PoopPlayerManager : IPoopPlayerManager, IClientListener
     /// </summary>
     public IGamePlayer? GetPlayer(int slot)
     {
-        return _playerManager.GetPlayer(slot);
+        return playerManager.GetPlayer(slot);
     }
 
     #endregion
 
-    #region IClientListener Implementation
-
-    public void OnClientConnected(IGameClient client)
-    {
-        // Nothing to do here
-    }
-
-    public void OnClientPutInServer(IGameClient client)
-    {
-        // Nothing to do here
-    }
+    #region Client Event Handlers
 
     /// <summary>
-    /// Called after admin check (player is authorized)
+    /// Called when a player is put in server
     /// Preload color preference from database into cache
     /// </summary>
-    public void OnClientPostAdminCheck(IGameClient client)
+    private void OnClientPutInServer(IGameClient client)
     {
         if (!client.IsValid || client.IsHltv || client.IsFakeClient)
         {
@@ -184,7 +204,7 @@ internal sealed class PoopPlayerManager : IPoopPlayerManager, IClientListener
 
         if (!ulong.TryParse(client.SteamId.ToString(), out var steamId))
         {
-            _logger.LogWarning("Invalid SteamID for client: {steamId}", client.SteamId);
+            logger.LogWarning("Invalid SteamID for client: {steamId}", client.SteamId);
             return;
         }
 
@@ -195,31 +215,49 @@ internal sealed class PoopPlayerManager : IPoopPlayerManager, IClientListener
     /// <summary>
     /// Async method to preload player color preference into cache
     /// </summary>
-    private async Task PreloadColorPreferenceAsync(string playerName, ulong steamId)
+    private async Task PreloadColorPreferenceAsync(string playerName, SteamID steamId)
     {
+        // Check if already in cache or loading
+        lock (_cacheLock)
+        {
+            if (_colorCache.ContainsKey(steamId) || !_loadingPreferences.Add(steamId))
+            {
+                return;
+            }
+        }
+
         try
         {
-            var preference = await _database.LoadColorPreferenceAsync(steamId);
+            var preference = await database.LoadColorPreferenceAsync(steamId);
 
-            if (preference != null)
+            lock (_cacheLock)
             {
-                lock (_cacheLock)
+                _loadingPreferences.Remove(steamId);
+                
+                if (preference != null)
                 {
                     _colorCache[steamId] = preference;
+                    logger.LogDebug("Preloaded color preference for {name}: RGB({r},{g},{b}) Rainbow={rainbow} Random={random}",
+                        playerName, preference.Red, preference.Green, preference.Blue,
+                        preference.IsRainbow, preference.IsRandom);
                 }
-
-                _logger.LogDebug("Preloaded color preference for {name}: RGB({r},{g},{b}) Rainbow={rainbow} Random={random}",
-                    playerName, preference.Red, preference.Green, preference.Blue,
-                    preference.IsRainbow, preference.IsRandom);
-            }
-            else
-            {
-                _logger.LogDebug("No color preference found for {name}, will use default", playerName);
+                else
+                {
+                    // Cache default to avoid future DB lookups
+                    _colorCache[steamId] = new PoopColorPreference(139, 69, 19);
+                    logger.LogDebug("No color preference found for {name}, cached default", playerName);
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to preload color preference for {name}", playerName);
+            logger.LogError(ex, "Failed to preload color preference for {name}", playerName);
+            lock (_cacheLock)
+            {
+                _loadingPreferences.Remove(steamId);
+                // Cache default on error to avoid repeated failed DB calls
+                _colorCache[steamId] = new PoopColorPreference(139, 69, 19);
+            }
         }
     }
 
@@ -227,20 +265,22 @@ internal sealed class PoopPlayerManager : IPoopPlayerManager, IClientListener
     /// Called when a player disconnects
     /// Clear cached data for this player
     /// </summary>
-    public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
+    private void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
         if (!ulong.TryParse(client.SteamId.ToString(), out var steamId))
         {
             return;
         }
 
-        ClearColorCache(steamId);
+        lock (_cacheLock)
+        {
+            _colorCache.Remove(steamId);
+            _loadingPreferences.Remove(steamId);
+        }
 
-        _logger.LogDebug("Cleared color cache for {name} (SteamID: {steamId})", client.Name, steamId);
+        logger.LogDebug("Cleared color cache for {name} (SteamID: {steamId}, Reason: {reason})",
+            client.Name, steamId, reason);
     }
-
-    public int ListenerVersion => IClientListener.ApiVersion;
-    public int ListenerPriority => 1; // Run after PlayerManager (priority 0)
 
     #endregion
 }

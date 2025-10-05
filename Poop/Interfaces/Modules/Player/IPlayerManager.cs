@@ -3,6 +3,7 @@ using Prefix.Poop.Interfaces;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Interfaces.Modules.Player;
 
@@ -24,7 +25,7 @@ internal interface IPlayerManager : IManager
     /// Get a wrapped IGamePlayer by SteamID
     /// Returns null if no player with that SteamID is found
     /// </summary>
-    IGamePlayer? GetPlayerBySteamId(string steamId);
+    IGamePlayer? GetPlayerBySteamId(SteamID steamId);
 
     /// <summary>
     /// Get all valid players
@@ -47,7 +48,7 @@ internal interface IPlayerManager : IManager
     /// <summary>
     /// Check if a SteamID is an admin
     /// </summary>
-    bool IsAdmin(string steamId);
+    bool IsAdmin(SteamID steamId);
 
     /// <summary>
     /// Get all players

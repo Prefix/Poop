@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Prefix.Poop.Interfaces;
-using Prefix.Poop.Interfaces.Database;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Modules;
 using Prefix.Poop.Interfaces.Modules.Player;
@@ -11,7 +10,10 @@ using Prefix.Poop.Shared;
 using Prefix.Poop.Shared.Events;
 using Prefix.Poop.Shared.Models;
 using Microsoft.Extensions.Logging;
+using Sharp.Shared.GameEntities;
+using Sharp.Shared.Objects;
 using Sharp.Shared.Types;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Modules.SharedInterface;
 
@@ -36,14 +38,14 @@ internal sealed class SharedInterface(
     public void OnPostInit()
     {
         // Register API methods as dynamic natives for cross-plugin calls
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.SpawnPoop", SpawnPoopNative);
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.ForcePlayerPoop", ForcePlayerPoopNative);
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetPlayerStatsAsync", GetPlayerStatsAsyncNative);
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetTopPoopersAsync", GetTopPoopersAsyncNative);
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetTopVictimsAsync", GetTopVictimsAsyncNative);
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetTotalPoopsCountAsync", GetTotalPoopsCountAsyncNative);
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetPlayerColorPreferenceAsync", GetPlayerColorPreferenceAsyncNative);
-        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.SetPlayerColorPreferenceAsync", SetPlayerColorPreferenceAsyncNative);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.SpawnPoop", SpawnPoop);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.ForcePlayerPoop", ForcePlayerPoop);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetPlayerStatsAsync", GetPlayerStatsAsync);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetTopPoopersAsync", GetTopPoopersAsync);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetTopVictimsAsync", GetTopVictimsAsync);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetTotalPoopsCountAsync", GetTotalPoopsCountAsync);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.GetPlayerColorPreferenceAsync", GetPlayerColorPreferenceAsync);
+        bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.SetPlayerColorPreferenceAsync", SetPlayerColorPreferenceAsync);
 
         // Register the shared interface itself for direct C# plugin access
         bridge.SharpModuleManager.RegisterSharpModuleInterface(bridge.Poop, IPoopShared.Identity, this);
@@ -69,8 +71,7 @@ internal sealed class SharedInterface(
 
         var args = new PoopCommandEventArgs
         {
-            PlayerSteamId = player.SteamId,
-            PlayerName = player.Name,
+            Player = player.Client,
             CommandName = commandName,
             Cancel = false
         };
@@ -83,18 +84,16 @@ internal sealed class SharedInterface(
     /// <summary>
     /// Internal method to fire the OnPoopSpawned event
     /// </summary>
-    internal void FirePoopSpawned(IGamePlayer? player, Vector position, float size, string? victimName, string? victimSteamId, bool isCommandTriggered, bool success)
+    internal void FirePoopSpawned(IGameClient? player, Vector position, float size, IGameClient? victim, bool isCommandTriggered, bool success)
     {
         if (OnPoopSpawned == null) return;
 
         var args = new PoopSpawnedEventArgs
         {
-            PlayerSteamId = player?.SteamId ?? string.Empty,
-            PlayerName = player?.Name ?? "Unknown",
+            Player = player!,
             Position = position,
             Size = size,
-            VictimName = victimName,
-            VictimSteamId = victimSteamId,
+            Victim = victim!,
             IsCommandTriggered = isCommandTriggered,
             Success = success
         };
@@ -107,20 +106,16 @@ internal sealed class SharedInterface(
     /// Translates to public API events
     /// </summary>
     private void OnPoopSpawnedInternal(PoopSpawnedInternalEventArgs args)
-    {
-        // Get player from SteamID
-        var player = playerManager.GetPlayerBySteamId(args.PlayerSteamId);
-        
+    {        
         // Determine if it was command-triggered based on whether we have a real player
         // (API calls use "API" as steam ID)
-        bool isCommandTriggered = args.PlayerSteamId != "API" && player != null;
+        bool isCommandTriggered = args.Player != null;
 
         FirePoopSpawned(
-            player: player,
+            player: args.Player,
             position: args.Position,
             size: args.Size,
-            victimName: args.VictimName,
-            victimSteamId: args.VictimSteamId,
+            victim: args.Victim,
             isCommandTriggered: isCommandTriggered,
             success: args.Success);
     }
@@ -128,14 +123,17 @@ internal sealed class SharedInterface(
     #endregion
 
     #region Spawn API
-
     public SpawnPoopResult SpawnPoop(
+        IGameClient? player,
         Vector position,
         float size = -1f,
         PoopColorPreference? colorPreference = null,
-        string? victimName = null,
+        IGameClient? victim = null,
         bool playSounds = true)
     {
+        // Note: position parameter is ignored - we get it from player's pawn automatically
+        // victim parameter is also ignored - we find nearest dead player automatically
+        
         // Use default color if not provided
         PoopColorPreference effectiveColor;
         if (colorPreference != null)
@@ -154,89 +152,44 @@ internal sealed class SharedInterface(
             effectiveColor = colorMenu.GetRandomColor();
         }
 
-        // Use the spawn service with full logic
+        // Use the full logic method - it handles position and victim internally
         var result = spawner.SpawnPoopWithFullLogic(
-            playerSteamId: "API",
-            position: position,
+            player: player,
             size: size,
             colorPreference: effectiveColor,
-            victimName: victimName,
-            victimSteamId: null,
             playSounds: playSounds,
             showMessages: false); // Don't show messages for direct API calls
-
-        // Event will fire automatically via PoopSpawner.PoopSpawnedInternal
 
         return result;
     }
 
     public SpawnPoopResult? ForcePlayerPoop(
-        string playerSteamId,
+        IGameClient? client,
         float size = -1f,
-        PoopColorPreference? colorPreference = null,
+        PoopColorPreference? color = null,
         bool playSounds = true)
     {
-        var player = playerManager.GetPlayerBySteamId(playerSteamId);
+        if (client == null)
+        {
+            return null;
+        }
+
+        // Get the player from the client
+        var player = playerManager.GetPlayerBySteamId(client.SteamId);
         if (player == null || !player.IsValid())
         {
-            logger.LogWarning("ForcePlayerPoop: Player not found or invalid: {steamId}", playerSteamId);
             return null;
         }
 
-        var controller = player.Controller;
-        if (controller == null)
-        {
-            logger.LogWarning("ForcePlayerPoop: Controller not found for player {name}", player.Name);
-            return null;
-        }
 
-        var pawn = controller.GetPlayerPawn();
-        if (pawn == null || !pawn.IsValid())
-        {
-            logger.LogWarning("ForcePlayerPoop: Pawn not found for player {name}", player.Name);
-            return null;
-        }
-
-        var position = pawn.GetAbsOrigin();
-
-        // Find nearest dead player
-        var victimInfo = spawner.FindNearestDeadPlayer(position, player.Slot);
-        var spawnPos = victimInfo?.Position ?? position;
-        var victimName = victimInfo?.PlayerName;
-        var victimSteamId = victimInfo?.SteamId;
-
-        // Get color preference: parameter > player's saved preference > default
-        PoopColorPreference effectiveColor;
-        if (colorPreference != null)
-        {
-            effectiveColor = colorPreference;
-        }
-        else if (config.EnableColorPreferences && ulong.TryParse(player.SteamId, out var steamId))
-        {
-            // Get from player manager (async call, but we'll use Task.Run to get it)
-            var colorTask = poopPlayerManager.GetColorPreferenceAsync(steamId);
-            effectiveColor = colorTask.Result; // Block on purpose for API simplicity
-        }
-        else
-        {
-            var (r, g, b) = config.GetDefaultColorRgb();
-            effectiveColor = new PoopColorPreference(r, g, b);
-        }
-
-        // Handle random mode
-        if (effectiveColor.IsRandom)
-        {
-            effectiveColor = colorMenu.GetRandomColor();
-        }
+        color ??= poopPlayerManager.GetColorPreference(player.SteamId);
 
         // Use the spawn service with full logic
+        // It will automatically get position from player's pawn and find nearest victim
         var result = spawner.SpawnPoopWithFullLogic(
-            playerSteamId: playerSteamId,
-            position: spawnPos,
+            player: client,
             size: size,
-            colorPreference: effectiveColor,
-            victimName: victimName,
-            victimSteamId: victimSteamId,
+            colorPreference: color,
             playSounds: playSounds,
             showMessages: true); // Show messages for player-triggered poops
 
@@ -245,54 +198,20 @@ internal sealed class SharedInterface(
         return result;
     }
 
-    // Native wrapper methods for dynamic native calls
-    private SpawnPoopResult SpawnPoopNative(float x, float y, float z, float size, int red, int green, int blue, bool isRainbow, bool playSounds)
-    {
-        var position = new Vector(x, y, z);
-        PoopColorPreference? colorPreference = null;
-
-        if (red >= 0 && green >= 0 && blue >= 0)
-        {
-            colorPreference = new PoopColorPreference(red, green, blue, isRainbow);
-        }
-
-        return SpawnPoop(position, size, colorPreference, null, playSounds);
-    }
-
-    private SpawnPoopResult? ForcePlayerPoopNative(string steamId, float size, int red, int green, int blue, bool isRainbow, bool playSounds)
-    {
-        PoopColorPreference? colorPreference = null;
-
-        if (red >= 0 && green >= 0 && blue >= 0)
-        {
-            colorPreference = new PoopColorPreference(red, green, blue, isRainbow);
-        }
-
-        return ForcePlayerPoop(steamId, size, colorPreference, playSounds);
-    }
-
     #endregion
 
     #region Statistics API
 
-    public async Task<PoopStats?> GetPlayerStatsAsync(string steamId)
+    public async Task<PoopStats?> GetPlayerStatsAsync(SteamID steamId)
     {
         try
-        {
-            if (!ulong.TryParse(steamId, out var steamIdUlong))
-            {
-                logger.LogWarning("Invalid SteamID format: {steamId}", steamId);
-                return null;
-            }
-
-            var database1 = database;
-            
+        {            
             // Get poop count from logs
-            var logs = await database1.GetRecentPoopsAsync(limit: int.MaxValue, playerSteamId: steamIdUlong);
+            var logs = await database.GetRecentPoopsAsync(limit: int.MaxValue, playerSteamId: steamId);
             var poopCount = logs.Length;
 
             // Get victim count
-            var victimCount = await database1.GetVictimPoopCountAsync(steamId);
+            var victimCount = await database.GetVictimPoopCountAsync(steamId);
 
             // Get player name from current connected players or from logs
             var player = playerManager.GetPlayerBySteamId(steamId);
@@ -366,28 +285,16 @@ internal sealed class SharedInterface(
         }
     }
 
-    // Native wrapper methods for async operations
-    private Task<PoopStats?> GetPlayerStatsAsyncNative(string steamId) => GetPlayerStatsAsync(steamId);
-    private Task<PoopStats[]> GetTopPoopersAsyncNative(int limit) => GetTopPoopersAsync(limit);
-    private Task<PoopStats[]> GetTopVictimsAsyncNative(int limit) => GetTopVictimsAsync(limit);
-    private Task<int> GetTotalPoopsCountAsyncNative() => GetTotalPoopsCountAsync();
-
     #endregion
 
     #region Player Color Preferences
 
-    public async Task<PoopColorPreference?> GetPlayerColorPreferenceAsync(string steamId)
+    public async Task<PoopColorPreference?> GetPlayerColorPreferenceAsync(SteamID steamId)
     {
         try
         {
-            if (!ulong.TryParse(steamId, out var steamIdUlong))
-            {
-                logger.LogWarning("Invalid SteamID format: {steamId}", steamId);
-                return null;
-            }
-
-            // Get from PoopPlayerManager (handles cache + database)
-            return await poopPlayerManager.GetColorPreferenceAsync(steamIdUlong);
+            // Get via PoopPlayerManager (checks cache first, then database)
+            return await poopPlayerManager.GetColorPreferenceAsync(steamId);
         }
         catch (Exception ex)
         {
@@ -396,34 +303,17 @@ internal sealed class SharedInterface(
         }
     }
 
-    public async Task SetPlayerColorPreferenceAsync(string steamId, PoopColorPreference color)
+    public async Task SetPlayerColorPreferenceAsync(SteamID steamId, PoopColorPreference color)
     {
         try
         {
-            if (!ulong.TryParse(steamId, out var steamIdUlong))
-            {
-                logger.LogWarning("Invalid SteamID format: {steamId}", steamId);
-                return;
-            }
-
             // Save via PoopPlayerManager (handles database + cache)
-            await poopPlayerManager.SaveColorPreferenceAsync(steamIdUlong, color);
-
-            logger.LogDebug("Set color preference for {steamId}: RGB({r},{g},{b}) Rainbow={rainbow}",
-                steamId, color.Red, color.Green, color.Blue, color.IsRainbow);
+            await poopPlayerManager.SaveColorPreferenceAsync(steamId, color);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error setting color preference for {steamId}", steamId);
         }
-    }
-
-    // Native wrapper methods for color preference operations
-    private Task<PoopColorPreference?> GetPlayerColorPreferenceAsyncNative(string steamId) => GetPlayerColorPreferenceAsync(steamId);
-    private Task SetPlayerColorPreferenceAsyncNative(string steamId, int red, int green, int blue, bool isRainbow)
-    {
-        var colorPreference = new PoopColorPreference(red, green, blue, isRainbow);
-        return SetPlayerColorPreferenceAsync(steamId, colorPreference);
     }
 
     #endregion

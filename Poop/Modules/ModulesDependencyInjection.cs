@@ -7,8 +7,9 @@ using Prefix.Poop.Modules.PoopPlayer;
 using Prefix.Poop.Modules.PoopModule.Lifecycle;
 using Prefix.Poop.Extensions;
 using Microsoft.Extensions.DependencyInjection;
-using Prefix.Poop.Interfaces.Database;
+using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Prefix.Poop.Shared;
+using IRagdollTracker = Prefix.Poop.Interfaces.PoopModule.Lifecycle.IRagdollTracker;
 
 namespace Prefix.Poop.Modules;
 
@@ -21,6 +22,7 @@ internal static class ModulesDependencyInjection
         services.AddSingleton<IModule, PoopCommands>();
         services.AddSingleton<IModule, IPoopDatabase, PoopDatabase>();
         services.AddSingleton<IModule, IPoopSpawner, PoopSpawner>();
+        services.AddSingleton<IModule, IPoopSizeGenerator, PoopSizeGenerator>();
         services.AddSingleton<IModule, IPoopPlayerManager, PoopPlayerManager>();
         services.AddSingleton<IModule, IPoopColorMenu, PoopColorMenu>();
         services.AddSingleton<IModule, IRainbowPoopTracker, RainbowPoopTracker>();

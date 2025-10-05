@@ -1,8 +1,9 @@
 using System.Threading.Tasks;
 using Prefix.Poop.Interfaces.Modules.Player;
 using Prefix.Poop.Shared.Models;
+using Sharp.Shared.Units;
 
-namespace Prefix.Poop.Interfaces.Modules;
+namespace Prefix.Poop.Interfaces.PoopModule;
 
 /// <summary>
 /// Interface for handling poop color selection menu and player color preferences
@@ -20,7 +21,7 @@ internal interface IPoopColorMenu : IModule
     /// </summary>
     /// <param name="steamId">Player's Steam ID</param>
     /// <returns>The player's color preference or default brown</returns>
-    Task<PoopColorPreference> GetPlayerColorPreferenceAsync(ulong steamId);
+    Task<PoopColorPreference> GetPlayerColorPreferenceAsync(SteamID steamId);
 
     /// <summary>
     /// Gets a random color from the available colors (excluding Rainbow and Random)

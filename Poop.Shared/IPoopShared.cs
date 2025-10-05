@@ -1,9 +1,12 @@
 // ReSharper disable InconsistentNaming, UnusedMember.Global, UnusedMemberInSuper.Global
 
+using System;
 using System.Threading.Tasks;
 using Prefix.Poop.Shared.Events;
 using Prefix.Poop.Shared.Models;
+using Sharp.Shared.Objects;
 using Sharp.Shared.Types;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Shared;
 
@@ -22,20 +25,20 @@ public interface IPoopShared
     /// Use this to block commands based on permissions (e.g., donator-only, admin-only, etc.)
     /// This fires BEFORE cooldown checks, alive checks, and any other validation
     /// </summary>
-    event System.Action<PoopCommandEventArgs>? OnPoopCommand;
+    event Action<PoopCommandEventArgs>? OnPoopCommand;
 
     /// <summary>
     /// Fired after a poop has been successfully spawned
     /// Use this for logging, stats tracking, custom effects, etc.
     /// </summary>
-    event System.Action<PoopSpawnedEventArgs>? OnPoopSpawned;
+    event Action<PoopSpawnedEventArgs>? OnPoopSpawned;
 
     #endregion
 
     #region Spawn API
 
     /// <summary>
-    /// Spawn a poop at a specific position without restrictions
+    /// Spawn a poop at a specific position (with full logic, sounds, messages, and logging)
     /// </summary>
     /// <param name="position">World position to spawn the poop</param>
     /// <param name="size">Size of the poop (-1 for random, or specify between MinPoopSize and MaxPoopSize)</param>
@@ -44,10 +47,11 @@ public interface IPoopShared
     /// <param name="playSounds">Whether to play poop sounds</param>
     /// <returns>Result containing the spawned entity and details</returns>
     SpawnPoopResult SpawnPoop(
+        IGameClient? player,
         Vector position,
         float size = -1.0f,
         PoopColorPreference? color = null,
-        string? victimName = null,
+        IGameClient? victim = null,
         bool playSounds = true);
 
     /// <summary>
@@ -59,7 +63,7 @@ public interface IPoopShared
     /// <param name="playSounds">Whether to play poop sounds</param>
     /// <returns>Result containing the spawned entity and details</returns>
     SpawnPoopResult? ForcePlayerPoop(
-        string playerSteamId,
+        IGameClient? player,
         float size = -1.0f,
         PoopColorPreference? color = null,
         bool playSounds = true);
@@ -73,7 +77,7 @@ public interface IPoopShared
     /// </summary>
     /// <param name="steamId">Player's SteamID64</param>
     /// <returns>Player's poop statistics (null if not found)</returns>
-    Task<PoopStats?> GetPlayerStatsAsync(string steamId);
+    Task<PoopStats?> GetPlayerStatsAsync(SteamID steamId);
 
     /// <summary>
     /// Get the top N players who placed the most poops
@@ -104,14 +108,14 @@ public interface IPoopShared
     /// </summary>
     /// <param name="steamId">Player's SteamID64</param>
     /// <returns>Player's color preference (null if not set)</returns>
-    Task<PoopColorPreference?> GetPlayerColorPreferenceAsync(string steamId);
+    Task<PoopColorPreference?> GetPlayerColorPreferenceAsync(SteamID steamId);
 
     /// <summary>
     /// Set a player's poop color preference
     /// </summary>
     /// <param name="steamId">Player's SteamID64</param>
     /// <param name="color">New color preference</param>
-    Task SetPlayerColorPreferenceAsync(string steamId, PoopColorPreference color);
+    Task SetPlayerColorPreferenceAsync(SteamID steamId, PoopColorPreference color);
 
     #endregion
 }

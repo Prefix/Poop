@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using Prefix.Poop.Interfaces;
-using Sharp.Shared.GameEntities;
+using Prefix.Poop.Modules.PoopModule;
+using Sharp.Shared.Objects;
 
 namespace Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 
@@ -10,9 +10,9 @@ namespace Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 internal interface IRagdollTracker : IModule
 {
     /// <summary>
-    /// Gets the read-only dictionary of tracked ragdolls by player slot
-    /// Key: Player slot
-    /// Value: Ragdoll entity
+    /// Gets the read-only dictionary of tracked ragdolls by game client
+    /// Key: Game client
+    /// Value: Ragdoll information
     /// </summary>
-    IReadOnlyDictionary<int, IBaseEntity> Ragdolls { get; }
+    IReadOnlyDictionary<IGameClient, RagdollInfo> Ragdolls { get; }
 }

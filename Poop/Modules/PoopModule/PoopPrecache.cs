@@ -36,16 +36,6 @@ internal sealed class PoopPrecache : IModule
         return true;
     }
 
-    public void OnPostInit()
-    {
-        // No post-init needed
-    }
-
-    public void Shutdown()
-    {
-        _logger.LogInformation("PoopPrecache shutting down");
-    }
-
     /// <summary>
     /// Precaches poop model and sound events when resources are being loaded
     /// </summary>

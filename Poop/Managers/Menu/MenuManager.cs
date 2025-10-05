@@ -78,13 +78,6 @@ internal class MenuManager(
         return true;
     }
 
-    public void OnPostInit()
-    {
-    }
-
-    public void OnAllSharpModulesLoaded()
-    {
-    }
 
     public void Shutdown()
     {

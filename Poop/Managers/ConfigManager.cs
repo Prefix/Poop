@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.Managers;
+using Prefix.Poop.Modules.PoopModule;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Managers;
 
@@ -13,7 +15,6 @@ namespace Prefix.Poop.Managers;
 internal sealed class ConfigManager : IConfigManager
 {
     private readonly ILogger<ConfigManager> _logger;
-    private readonly IConfiguration _configuration;
     private readonly HashSet<string> _adminSteamIds;
 
     // Global Configuration
@@ -25,9 +26,9 @@ internal sealed class ConfigManager : IConfigManager
     public float MinPoopSize { get; }
     public float MaxPoopSize { get; }
     public float DefaultPoopSize { get; }
-    public int CommonSizeChance { get; }
-    public int SmallSizeChance { get; }
-    public int RareSizeChance => 100 - CommonSizeChance - SmallSizeChance;
+    public List<PoopSizeGenerationTier> GenerationTiers { get; }
+    public List<PoopSizeCategory> SizeCategories { get; }
+    public float MassiveAnnouncementThreshold { get; }
     public int TopRecordsLimit { get; }
     public int CommandCooldownSeconds { get; }
     public float MaxDeadPlayerDistance { get; }
@@ -51,7 +52,6 @@ internal sealed class ConfigManager : IConfigManager
 
     // Database Settings
     public string DatabaseConnection { get; }
-    public bool DatabaseAutoMigrate { get; }
     public string DatabaseHost { get; }
     public int DatabasePort { get; }
     public string DatabaseName { get; }
@@ -65,7 +65,6 @@ internal sealed class ConfigManager : IConfigManager
     public ConfigManager(ILogger<ConfigManager> logger, IConfiguration configuration)
     {
         _logger = logger;
-        _configuration = configuration;
 
         // Load global admin list
         var adminList = configuration.GetSection("AdminSteamIds").Get<List<string>>() ?? new List<string>();
@@ -74,49 +73,109 @@ internal sealed class ConfigManager : IConfigManager
         // Load PoopModule configuration
         var poopModule = configuration.GetSection("PoopModule");
 
-        PoopModel = poopModule.GetValue("PoopModel", "models/yappershq/fun/poop.vmdl");
-        SoundEventsFile = poopModule.GetValue("SoundEventsFile", "soundevents/poop_sounds.vsndevts");
+        // Assets
+        var assets = poopModule.GetSection("Assets");
+        PoopModel = assets.GetValue("PoopModel", "models/yappershq/fun/poop.vmdl");
+        SoundEventsFile = assets.GetValue("SoundEventsFile", "soundevents/poop_sounds.vsndevts");
 
-        MinPoopSize = poopModule.GetValue("MinPoopSize", 0.3f);
-        MaxPoopSize = poopModule.GetValue("MaxPoopSize", 2.0f);
-        DefaultPoopSize = poopModule.GetValue("DefaultPoopSize", 1.0f);
-        CommonSizeChance = poopModule.GetValue("CommonSizeChance", 85);
-        SmallSizeChance = poopModule.GetValue("SmallSizeChance", 10);
+        // Size configuration
+        var sizeConfig = poopModule.GetSection("Size");
+        MinPoopSize = sizeConfig.GetValue("MinPoopSize", 0.3f);
+        MaxPoopSize = sizeConfig.GetValue("MaxPoopSize", 2.6f);
+        DefaultPoopSize = sizeConfig.GetValue("DefaultPoopSize", 1.0f);
+        MassiveAnnouncementThreshold = sizeConfig.GetValue("MassiveAnnouncementThreshold", 2.0f);
 
-        TopRecordsLimit = poopModule.GetValue("TopRecordsLimit", 10);
-        CommandCooldownSeconds = poopModule.GetValue("CommandCooldownSeconds", 3);
-        MaxDeadPlayerDistance = poopModule.GetValue("MaxDeadPlayerDistance", 500.0f);
-        UseRagdollVictimDetection = poopModule.GetValue("UseRagdollVictimDetection", true);
-        RagdollDetectionDistance = poopModule.GetValue("RagdollDetectionDistance", 100.0f);
-        ShowMessageOnPoop = poopModule.GetValue("ShowMessageOnPoop", true);
-        MaxPoopsPerRound = poopModule.GetValue("MaxPoopsPerRound", 0);
-        RemovePoopsOnRoundEnd = poopModule.GetValue("RemovePoopsOnRoundEnd", false);
-        PoopLifetimeSeconds = poopModule.GetValue("PoopLifetimeSeconds", 0);
-
-        EnableRainbowPoops = poopModule.GetValue("EnableRainbowPoops", true);
-        RainbowAnimationSpeed = poopModule.GetValue("RainbowAnimationSpeed", 2.0f);
-        DefaultPoopColor = poopModule.GetValue("DefaultPoopColor", "139,69,19");
-        EnableColorPreferences = poopModule.GetValue("EnableColorPreferences", true);
-
-        EnableSounds = poopModule.GetValue("EnableSounds", true);
-        SoundVolume = poopModule.GetValue("SoundVolume", 0.5f);
-        PoopSounds = poopModule.GetSection("PoopSounds").Get<string[]>() ?? new[]
+        // Load generation tiers with fallback to defaults
+        // Note: The "Rare" tier (2%) uses sub-tiers for sophisticated weighted distribution:
+        // Massive (80%), Legendary (19%), Ultra Legendary (1%). SubTiers can be used on any tier!
+        GenerationTiers = sizeConfig.GetSection("GenerationTiers").Get<List<PoopSizeGenerationTier>>() ?? new()
         {
+            new() { Chance = 40, Name = "Normal", MinMultiplier = 0.9f, MaxMultiplier = 1.1f },
+            new() { Chance = 25, Name = "Above Average", MinMultiplier = 1.1f, MaxMultiplier = 1.4f },
+            new() { Chance = 15, Name = "Small", MinMultiplier = 0.7f, MaxMultiplier = 0.9f },
+            new() { Chance = 10, Name = "Large", MinMultiplier = 1.4f, MaxMultiplier = 1.7f },
+            new() { Chance = 5, Name = "Tiny", MinMultiplier = 0.5f, MaxMultiplier = 0.7f },
+            new() { Chance = 3, Name = "Huge", MinMultiplier = 1.7f, MaxMultiplier = 2.0f },
+            new() 
+            { 
+                Chance = 2, 
+                Name = "Rare", 
+                MinMultiplier = 2.0f, 
+                MaxMultiplier = 2.6f,
+                SubTiers =
+                [
+                    new() { Weight = 80, Name = "Massive", MinRangePercent = 0.0f, MaxRangePercent = 0.833f },
+                    // Legendary: 19% of rare tier (0.38% overall) - 2.5 to 2.6 range (83.3-100% of parent range)
+                    new() { Weight = 19, Name = "Legendary", MinRangePercent = 0.833f, MaxRangePercent = 1.0f },
+                    // Ultra Legendary: 1% of rare tier (0.02% overall) - 2.59 to 2.599 range (98-99.9% of parent range)
+                    new() { Weight = 1, Name = "Ultra Legendary", MinRangePercent = 0.98f, MaxRangePercent = 0.999f }
+                ]
+            }
+        };
+
+        // Load size categories with fallback to defaults
+        SizeCategories = sizeConfig.GetSection("SizeCategories").Get<List<PoopSizeCategory>>() ??
+        [
+            new() { Threshold = 2.5f, LocaleKey = "size.legendary" },
+            new() { Threshold = 2.0f, LocaleKey = "size.desc_massive" },
+            new() { Threshold = 1.7f, LocaleKey = "size.desc_huge" },
+            new() { Threshold = 1.4f, LocaleKey = "size.desc_large" },
+            new() { Threshold = 1.1f, LocaleKey = "size.desc_above_average" },
+            new() { Threshold = 0.9f, LocaleKey = "size.desc_normal" },
+            new() { Threshold = 0.7f, LocaleKey = "size.desc_small" },
+            new() { Threshold = 0.5f, LocaleKey = "size.desc_tiny" },
+            new() { Threshold = 0.0f, LocaleKey = "size.desc_microscopic" }
+        ];
+
+        // Victim detection configuration
+        var victimDetection = poopModule.GetSection("VictimDetection");
+        MaxDeadPlayerDistance = victimDetection.GetValue("MaxDeadPlayerDistance", 500.0f);
+        UseRagdollVictimDetection = victimDetection.GetValue("UseRagdollVictimDetection", true);
+        RagdollDetectionDistance = victimDetection.GetValue("RagdollDetectionDistance", 100.0f);
+
+        // Gameplay configuration
+        var gameplay = poopModule.GetSection("Gameplay");
+        ShowMessageOnPoop = gameplay.GetValue("ShowMessageOnPoop", true);
+        MaxPoopsPerRound = gameplay.GetValue("MaxPoopsPerRound", 0);
+        RemovePoopsOnRoundEnd = gameplay.GetValue("RemovePoopsOnRoundEnd", false);
+        PoopLifetimeSeconds = gameplay.GetValue("PoopLifetimeSeconds", 0);
+
+        // Commands configuration
+        var commands = poopModule.GetSection("Commands");
+        TopRecordsLimit = commands.GetValue("TopRecordsLimit", 10);
+        CommandCooldownSeconds = commands.GetValue("CommandCooldownSeconds", 3);
+
+        // Color configuration
+        var colorConfig = poopModule.GetSection("Color");
+        EnableRainbowPoops = colorConfig.GetValue("EnableRainbowPoops", true);
+        RainbowAnimationSpeed = colorConfig.GetValue("RainbowAnimationSpeed", 2.0f);
+        DefaultPoopColor = colorConfig.GetValue("DefaultPoopColor", "139,69,19");
+        EnableColorPreferences = colorConfig.GetValue("EnableColorPreferences", true);
+
+        // Sound configuration
+        var soundConfig = poopModule.GetSection("Sound");
+        EnableSounds = soundConfig.GetValue("EnableSounds", true);
+        SoundVolume = soundConfig.GetValue("SoundVolume", 0.5f);
+        PoopSounds = soundConfig.GetSection("PoopSounds").Get<string[]>() ??
+        [
             "poop.poop_sound_01",
             "poop.poop_sound_02",
             "poop.poop_sound_03"
-        };
+        ];
 
-        DatabaseConnection = poopModule.GetValue("DatabaseConnection", string.Empty);
-        DatabaseAutoMigrate = poopModule.GetValue("DatabaseAutoMigrate", true);
-        DatabaseHost = poopModule.GetValue("DatabaseHost", "localhost");
-        DatabasePort = poopModule.GetValue("DatabasePort", 3306);
-        DatabaseName = poopModule.GetValue("DatabaseName", "poopdb");
-        DatabaseUser = poopModule.GetValue("DatabaseUser", "root");
-        DatabasePassword = poopModule.GetValue("DatabasePassword", string.Empty);
+        // Database configuration
+        var dbConfig = poopModule.GetSection("Database");
+        DatabaseConnection = dbConfig.GetValue("ConnectionString", string.Empty);
+        DatabaseHost = dbConfig.GetValue("Host", "localhost");
+        DatabasePort = dbConfig.GetValue("Port", 3306);
+        DatabaseName = dbConfig.GetValue("Name", "poopdb");
+        DatabaseUser = dbConfig.GetValue("User", "root");
+        DatabasePassword = dbConfig.GetValue("Password", string.Empty);
 
-        ChatPrefix = poopModule.GetValue("ChatPrefix", " [Poop]");
-        DebugMode = poopModule.GetValue("DebugMode", false);
+        // UI configuration
+        var uiConfig = poopModule.GetSection("UI");
+        ChatPrefix = uiConfig.GetValue("ChatPrefix", " [Poop]");
+        DebugMode = uiConfig.GetValue("DebugMode", false);
 
         Validate();
 
@@ -126,7 +185,7 @@ internal sealed class ConfigManager : IConfigManager
     /// <summary>
     /// Check if a SteamID is an admin
     /// </summary>
-    public bool IsAdmin(string steamId) => _adminSteamIds.Contains(steamId);
+    public bool IsAdmin(SteamID steamId) => _adminSteamIds.Contains(steamId.ToString());
 
     /// <summary>
     /// Gets the default poop color as RGB tuple
@@ -168,13 +227,120 @@ internal sealed class ConfigManager : IConfigManager
             _logger.LogWarning("MaxPoopSize ({max}) should be greater than DefaultPoopSize ({default})",
                 MaxPoopSize, DefaultPoopSize);
 
-        if (CommonSizeChance + SmallSizeChance > 100)
-            _logger.LogWarning("CommonSizeChance ({common}) + SmallSizeChance ({small}) exceeds 100%",
-                CommonSizeChance, SmallSizeChance);
+        // Validate size categories
+        if (SizeCategories.Count == 0)
+        {
+            _logger.LogWarning("SizeCategories is empty, size descriptions may not work correctly");
+        }
+        else
+        {
+            // Check if categories are sorted descending (largest to smallest)
+            for (int i = 0; i < SizeCategories.Count - 1; i++)
+            {
+                if (SizeCategories[i].Threshold < SizeCategories[i + 1].Threshold)
+                {
+                    _logger.LogWarning(
+                        "SizeCategories should be sorted by Threshold descending (largest first). " +
+                        "Category at index {index} ({threshold1}) is smaller than next ({threshold2})",
+                        i, SizeCategories[i].Threshold, SizeCategories[i + 1].Threshold);
+                    break;
+                }
+            }
 
-        if (RareSizeChance < 0)
-            _logger.LogWarning("RareSizeChance is negative ({rare}%), adjust CommonSizeChance or SmallSizeChance",
-                RareSizeChance);
+            // Check for missing locale keys
+            foreach (var category in SizeCategories)
+            {
+                if (string.IsNullOrWhiteSpace(category.LocaleKey))
+                {
+                    _logger.LogWarning("SizeCategory with threshold {threshold} has empty LocaleKey", 
+                        category.Threshold);
+                }
+            }
+        }
+
+        if (MassiveAnnouncementThreshold < 0)
+        {
+            _logger.LogWarning("MassiveAnnouncementThreshold ({value}) should not be negative",
+                MassiveAnnouncementThreshold);
+        }
+
+        // Validate generation tiers
+        if (GenerationTiers.Count == 0)
+        {
+            _logger.LogWarning("GenerationTiers is empty, size generation may not work correctly");
+        }
+        else
+        {
+            // Check if chances sum to 100
+            int totalChance = 0;
+            foreach (var tier in GenerationTiers)
+            {
+                totalChance += tier.Chance;
+
+                // Validate individual tier properties
+                if (tier.Chance <= 0)
+                {
+                    _logger.LogWarning("GenerationTier '{name}' has invalid Chance ({chance}), must be > 0",
+                        tier.Name, tier.Chance);
+                }
+
+                if (tier.MinMultiplier <= 0 || tier.MaxMultiplier <= 0)
+                {
+                    _logger.LogWarning("GenerationTier '{name}' has invalid multipliers (Min: {min}, Max: {max})",
+                        tier.Name, tier.MinMultiplier, tier.MaxMultiplier);
+                }
+
+                if (tier.MinMultiplier >= tier.MaxMultiplier)
+                {
+                    _logger.LogWarning("GenerationTier '{name}' MinMultiplier ({min}) should be less than MaxMultiplier ({max})",
+                        tier.Name, tier.MinMultiplier, tier.MaxMultiplier);
+                }
+
+                if (string.IsNullOrWhiteSpace(tier.Name))
+                {
+                    _logger.LogWarning("GenerationTier with Chance {chance}% has empty Name", tier.Chance);
+                }
+
+                // Validate sub-tiers if defined
+                if (tier.SubTiers is { Count: > 0 })
+                {
+                    int totalWeight = 0;
+                    foreach (var subTier in tier.SubTiers)
+                    {
+                        totalWeight += subTier.Weight;
+
+                            if (subTier.Weight <= 0)
+                            {
+                                _logger.LogWarning("SubTier '{subName}' in tier '{tierName}' has invalid Weight ({weight})",
+                                    subTier.Name, tier.Name, subTier.Weight);
+                            }
+
+                            if (subTier.MinRangePercent < 0 || subTier.MinRangePercent > 1 ||
+                                subTier.MaxRangePercent < 0 || subTier.MaxRangePercent > 1)
+                            {
+                                _logger.LogWarning("SubTier '{subName}' in tier '{tierName}' has invalid range percents (Min: {min}, Max: {max})",
+                                    subTier.Name, tier.Name, subTier.MinRangePercent, subTier.MaxRangePercent);
+                            }
+
+                        if (subTier.MinRangePercent >= subTier.MaxRangePercent)
+                        {
+                            _logger.LogWarning("SubTier '{subName}' in tier '{tierName}' MinRangePercent ({min}) should be less than MaxRangePercent ({max})",
+                                subTier.Name, tier.Name, subTier.MinRangePercent, subTier.MaxRangePercent);
+                        }
+                    }
+
+                    if (totalWeight == 0)
+                    {
+                        _logger.LogWarning("GenerationTier '{name}' SubTiers have zero total weight", tier.Name);
+                    }
+                }
+            }
+
+            if (totalChance != 100)
+            {
+                _logger.LogWarning("GenerationTiers total chance is {total}%, should sum to 100%", totalChance);
+            }
+        }
     }
 
     public bool Init()

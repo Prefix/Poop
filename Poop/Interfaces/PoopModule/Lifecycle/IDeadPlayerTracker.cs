@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using Prefix.Poop.Interfaces;
 using Prefix.Poop.Modules.PoopModule;
+using Sharp.Shared.Objects;
 
-namespace Prefix.Poop.Interfaces.PoopModule.Lifecycle;
+namespace Prefix.Poop.Interfaces.Modules;
 
 /// <summary>
 /// Interface for tracking dead player positions
@@ -14,5 +14,5 @@ internal interface IDeadPlayerTracker : IModule
     /// Gets the dictionary of currently tracked dead players
     /// Key: Player slot, Value: Dead player information
     /// </summary>
-    IReadOnlyDictionary<int, DeadPlayerInfo> DeadPlayers { get; }
+    IReadOnlyDictionary<IGameClient, DeadPlayerInfo> DeadPlayers { get; }
 }

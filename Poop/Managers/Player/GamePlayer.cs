@@ -2,6 +2,7 @@ using System;
 using Prefix.Poop.Interfaces.Modules.Player;
 using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Managers.Player;
 
@@ -18,7 +19,7 @@ internal class GamePlayer(IGameClient client, PlayerManager playerManager) : IGa
 
     public bool IsAdmin => playerManager.IsAdmin(SteamId);
 
-    public string SteamId { get; } = client.SteamId.ToString();
+    public SteamID SteamId { get; } = client.SteamId;
 
     public string Name { get; } = client.Name;
 
@@ -33,11 +34,6 @@ internal class GamePlayer(IGameClient client, PlayerManager playerManager) : IGa
     /// </summary>
     internal void UpdateClient(IGameClient client)
     {
-        if (client.SteamId.ToString() != SteamId)
-        {
-            throw new InvalidOperationException($"Cannot update client with different SteamID. Expected: {SteamId}, Got: {client.SteamId}");
-        }
-
         _client = client;
     }
 

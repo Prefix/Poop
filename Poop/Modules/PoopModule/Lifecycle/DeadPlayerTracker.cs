@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
+using Prefix.Poop.Interfaces.Modules;
+using Prefix.Poop.Interfaces.Modules.Player;
+using Sharp.Shared.Enums;
 using Sharp.Shared.GameEvents;
 using Sharp.Shared.Objects;
 
@@ -12,21 +14,31 @@ namespace Prefix.Poop.Modules.PoopModule.Lifecycle;
 /// Tracks dead player positions for traditional (non-ragdoll) detection
 /// Listens to game events and maintains a dictionary of dead player locations
 /// </summary>
-internal sealed class DeadPlayerTracker : IDeadPlayerTracker, Interfaces.Modules.IDeadPlayerTracker
+internal sealed class DeadPlayerTracker : IDeadPlayerTracker
 {
     private readonly ILogger<DeadPlayerTracker> _logger;
-    private readonly Dictionary<int, DeadPlayerInfo> _deadPlayers = new();
+    private readonly Dictionary<IGameClient, DeadPlayerInfo> _deadPlayers = new();
 
-    public IReadOnlyDictionary<int, DeadPlayerInfo> DeadPlayers => _deadPlayers;
+    public IReadOnlyDictionary<IGameClient, DeadPlayerInfo> DeadPlayers => _deadPlayers;
+    private readonly IPlayerManager _playerManager;
+    private readonly IClientListenerManager _clientListenerManager;
 
-    public DeadPlayerTracker(ILogger<DeadPlayerTracker> logger, IEventManager eventManager)
+    public DeadPlayerTracker(
+        ILogger<DeadPlayerTracker> logger,
+        IEventManager eventManager,
+        IClientListenerManager clientListenerManager,
+        IPlayerManager playerManager)
     {
         _logger = logger;
+        _playerManager = playerManager;
+        _clientListenerManager = clientListenerManager;
 
         // Register event listeners
         eventManager.ListenEvent("player_death", OnPlayerDeath);
         eventManager.ListenEvent("round_start", OnRoundStart);
-        eventManager.ListenEvent("player_disconnect", OnPlayerDisconnect);
+
+        // Subscribe to client events
+        _clientListenerManager.ClientDisconnected += OnClientDisconnected;
     }
 
     public bool Init()
@@ -43,6 +55,10 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker, Interfaces.Modules
     public void Shutdown()
     {
         _logger.LogInformation("DeadPlayerTracker shutting down");
+        
+        // Unsubscribe from client events
+        _clientListenerManager.ClientDisconnected -= OnClientDisconnected;
+        
         _deadPlayers.Clear();
     }
 
@@ -70,13 +86,16 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker, Interfaces.Modules
             {
                 var vec = pawn.GetAbsOrigin();
 
-                // Get victim's SteamID from the controller
-                string? steamId = victim.SteamId.ToString();
-
-                _deadPlayers[victim.PlayerSlot] = new DeadPlayerInfo(vec, victim.PlayerName, steamId);
+                IGameClient? gameClient = _playerManager.GetPlayer(victim.PlayerSlot)?.Client;
+                if (gameClient == null)
+                {
+                    _logger.LogDebug("Player death event: could not find game client for slot {slot}", victim.PlayerSlot);
+                    return;
+                }
+                _deadPlayers[gameClient] = new DeadPlayerInfo(vec, gameClient);
 
                 _logger.LogDebug("Tracked dead player: {name} (slot {slot}, SteamID: {steamId}) at ({x:F2}, {y:F2}, {z:F2})",
-                    victim.PlayerName, victim.PlayerSlot, steamId ?? "unknown", vec.X, vec.Y, vec.Z);
+                    victim.PlayerName, victim.PlayerSlot, gameClient.SteamId.ToString(), vec.X, vec.Y, vec.Z);
             }
         }
         catch (Exception ex)
@@ -96,13 +115,14 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker, Interfaces.Modules
     }
 
     /// <summary>
-    /// Handles player disconnect - removes player from tracking
+    /// Handles client disconnect - removes player from tracking if found
     /// </summary>
-    private void OnPlayerDisconnect(IGameEvent ev)
+    private void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
-        // Note: Player slot not available from disconnect event in current ModSharp API
-        // Dead players are cleared on round start instead
-        // This is acceptable behavior as disconnected players won't be targeted anyway
-        _logger.LogDebug("Player disconnected (dead players cleared on round start)");
+        if (_deadPlayers.Remove(client))
+        {
+            _logger.LogDebug("Removed dead player tracking for disconnected client: {name} (SteamID: {steamId}, Reason: {reason})",
+                client.Name, client.SteamId.ToString(), reason);
+        }
     }
 }

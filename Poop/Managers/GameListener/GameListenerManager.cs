@@ -1,4 +1,3 @@
-using Prefix.Poop.Interfaces;
 using Prefix.Poop.Interfaces.Managers;
 using Sharp.Shared.Listeners;
 
@@ -7,7 +6,7 @@ namespace Prefix.Poop.Managers.GameListener;
 /// <summary>
 /// Manages game lifecycle events and exposes them as .NET events
 /// </summary>
-internal sealed class GameListenerManager(InterfaceBridge bridge) : IGameListenerManager, IManager, IGameListener
+internal sealed class GameListenerManager(InterfaceBridge bridge) : IGameListenerManager, IGameListener
 {
     public event IGameListenerManager.ListenerDelegate? GameInit;
     public event IGameListenerManager.ListenerDelegate? GameShutdown;

@@ -3,15 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Prefix.Poop.Interfaces;
-using Prefix.Poop.Interfaces.Database;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules;
 using Prefix.Poop.Interfaces.Modules.Player;
 using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Shared;
 using Prefix.Poop.Shared.Models;
 using Prefix.Poop.Utils;
 using Microsoft.Extensions.Logging;
+using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Sharp.Shared.Enums;
 using Sharp.Shared.Types;
 
@@ -29,12 +28,12 @@ internal sealed class PoopCommands : IModule
     private readonly ILocaleManager _locale;
     private readonly IPoopDatabase _database;
     private readonly IPoopSpawner _spawner;
+    private readonly IPoopSizeGenerator _sizeGenerator;
     private readonly IPoopLifecycleManager _lifecycleManager;
     private readonly IPoopColorMenu _colorMenu;
     private readonly IPoopPlayerManager _poopPlayerManager;
     private readonly IPoopShared _sharedInterface;
     private readonly CommandCooldownTracker _cooldowns;
-    private readonly Random _random;
 
     public PoopCommands(
         ILogger<PoopCommands> logger,
@@ -44,6 +43,7 @@ internal sealed class PoopCommands : IModule
         ILocaleManager locale,
         IPoopDatabase database,
         IPoopSpawner spawner,
+        IPoopSizeGenerator sizeGenerator,
         IPoopLifecycleManager lifecycleManager,
         IPoopColorMenu colorMenu,
         IPoopPlayerManager poopPlayerManager,
@@ -56,12 +56,12 @@ internal sealed class PoopCommands : IModule
         _locale = locale;
         _database = database;
         _spawner = spawner;
+        _sizeGenerator = sizeGenerator;
         _lifecycleManager = lifecycleManager;
         _colorMenu = colorMenu;
         _poopPlayerManager = poopPlayerManager;
         _sharedInterface = sharedInterface;
         _cooldowns = new CommandCooldownTracker(_config.CommandCooldownSeconds);
-        _random = new Random();
     }
 
     public bool Init()
@@ -71,20 +71,10 @@ internal sealed class PoopCommands : IModule
             _config.CommandCooldownSeconds, _config.TopRecordsLimit, _config.MaxDeadPlayerDistance);
 
         // Initialize the chat prefix for extension methods
-        ControllerExtensions.InitializeChatPrefix(_config.ChatPrefix);
+        Format.InitializeChatPrefix(_config.ChatPrefix);
+        RegisterCommands();
 
         return true;
-    }
-
-    public void OnPostInit()
-    {
-        _logger.LogInformation("PoopCommands post-initialized - registering commands");
-        RegisterCommands();
-    }
-
-    public void Shutdown()
-    {
-        _logger.LogInformation("PoopCommands shutting down");
     }
 
     private void RegisterCommands()
@@ -94,10 +84,6 @@ internal sealed class PoopCommands : IModule
         // Main poop commands
         _commandManager.AddClientChatCommand("poop", OnPoopCommand);
         _commandManager.AddClientChatCommand("shit", OnPoopCommand);
-
-        // Size control commands
-        _commandManager.AddClientChatCommand("poop_size", OnPoopSizeCommand);
-        _commandManager.AddClientChatCommand("poop_rnd", OnPoopRandomCommand);
 
         // Color selection command
         _commandManager.AddClientChatCommand("poopcolor", OnPoopColorCommand);
@@ -113,7 +99,7 @@ internal sealed class PoopCommands : IModule
         // Debug/admin commands (server console only)
         _commandManager.AddServerCommand("poop_dryrun", OnPoopDryrunCommand);
 
-        _logger.LogInformation("Registered 13 poop commands via CommandManager");
+        _logger.LogInformation("Registered 11 poop commands via CommandManager");
     }
 
     #region Command Handlers - Using CommandManager
@@ -145,15 +131,10 @@ internal sealed class PoopCommands : IModule
         }
 
         // 2. Check cooldown (on main thread)
-        if (!ulong.TryParse(player.SteamId, out var steamId))
-        {
-            _logger.LogWarning("Invalid SteamID for player {player}: {steamId}", player.Name, player.SteamId);
-            return;
-        }
 
-        if (!_cooldowns.CanExecute("toppoopers", steamId))
+        if (!_cooldowns.CanExecute("toppoopers", player.Client))
         {
-            var remaining = _cooldowns.GetRemainingCooldown("toppoopers", steamId);
+            var remaining = _cooldowns.GetRemainingCooldown("toppoopers", player.Client);
             controller.PrintToChat(_locale.GetString("common.cooldown", new Dictionary<string, object>
             {
                 ["remaining"] = remaining
@@ -238,16 +219,9 @@ internal sealed class PoopCommands : IModule
             return;
         }
 
-        // 2. Check cooldown (on main thread)
-        if (!ulong.TryParse(player.SteamId, out var steamId))
+        if (!_cooldowns.CanExecute("toppoop", player.Client))
         {
-            _logger.LogWarning("Invalid SteamID for player {player}: {steamId}", player.Name, player.SteamId);
-            return;
-        }
-
-        if (!_cooldowns.CanExecute("toppoop", steamId))
-        {
-            var remaining = _cooldowns.GetRemainingCooldown("toppoop", steamId);
+            var remaining = _cooldowns.GetRemainingCooldown("toppoop", player.Client);
             controller.PrintToChat(_locale.GetString("common.cooldown", new Dictionary<string, object>
             {
                 ["remaining"] = remaining
@@ -381,17 +355,9 @@ internal sealed class PoopCommands : IModule
                 return ECommandAction.Handled;
             }
 
-            // 2. Check cooldown using player's SteamID
-            if (!ulong.TryParse(player.SteamId, out var steamId))
+            if (!_cooldowns.CanExecute("poop", player.Client))
             {
-                _logger.LogWarning("Invalid SteamID for player {player}: {steamId}", player.Name, player.SteamId);
-                controller.PrintToChat(_locale.GetString("common.invalid_steamid"));
-                return ECommandAction.Handled;
-            }
-
-            if (!_cooldowns.CanExecute("poop", steamId))
-            {
-                var remaining = _cooldowns.GetRemainingCooldown("poop", steamId);
+                var remaining = _cooldowns.GetRemainingCooldown("poop", player.Client);
                 controller.PrintToChat(_locale.GetString("common.cooldown", new Dictionary<string, object>
                 {
                     ["remaining"] = remaining
@@ -416,26 +382,23 @@ internal sealed class PoopCommands : IModule
             // 5. Get player position
             var position = pawn.GetAbsOrigin();
 
-            // 6. Find nearest dead player
-            var victimInfo = _spawner.FindNearestDeadPlayer(position, player.Slot);
-            string? victimName = victimInfo?.PlayerName;
-
-            if (victimInfo != null)
-            {
-                _logger.LogDebug("Spawning poop on dead player {victim} from {player}",
-                    victimName, player.Name);
-            }
+            // 6. Find nearest dead player (victim can be null)
+            var victim = _spawner.FindNearestDeadPlayer(player.Client)?.Player;
 
             // 7. Get player's color preference from PoopPlayerManager (handles cache)
             // Check if color preferences are enabled
             if (_config.EnableColorPreferences)
             {
+                // Capture variables for closure
+                var playerClient = player.Client;
+                var playerName = player.Name;
+                
                 // Run color preference fetch on background thread (may hit database)
                 Task.Run(async () =>
                 {
                     try
                     {
-                        var colorPref = await _poopPlayerManager.GetColorPreferenceAsync(steamId);
+                        var colorPref = await _poopPlayerManager.GetColorPreferenceAsync(playerClient.SteamId);
 
                         // If random mode, get a random color each time
                         if (colorPref.IsRandom)
@@ -447,19 +410,16 @@ internal sealed class PoopCommands : IModule
                         await _bridge.ModSharp.InvokeFrameActionAsync(() =>
                         {
                             _spawner.SpawnPoopWithFullLogic(
-                                player.SteamId,
-                                position,
+                                playerClient,
                                 size: -1.0f,
                                 colorPref,
-                                victimName,
-                                victimInfo?.SteamId,
                                 playSounds: true,
                                 showMessages: true);
                         });
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error getting color preference for {player}, using default", player.Name);
+                        _logger.LogError(ex, "Error getting color preference for {player}, using default", playerName);
                         // Use default color on error
                         var (r, g, b) = _config.GetDefaultColorRgb();
                         var defaultColorPref = new PoopColorPreference(r, g, b);
@@ -467,12 +427,9 @@ internal sealed class PoopCommands : IModule
                         await _bridge.ModSharp.InvokeFrameActionAsync(() =>
                         {
                             _spawner.SpawnPoopWithFullLogic(
-                                player.SteamId,
-                                position,
+                                playerClient,
                                 size: -1.0f,
                                 defaultColorPref,
-                                victimName,
-                                victimInfo?.SteamId,
                                 playSounds: true,
                                 showMessages: true);
                         });
@@ -485,12 +442,9 @@ internal sealed class PoopCommands : IModule
                 var (r, g, b) = _config.GetDefaultColorRgb();
                 var colorPref = new PoopColorPreference(r, g, b);
                 _spawner.SpawnPoopWithFullLogic(
-                    player.SteamId,
-                    position,
+                    player.Client,
                     size: -1.0f,
                     colorPref,
-                    victimName,
-                    victimInfo?.SteamId,
                     playSounds: true,
                     showMessages: true);
             }
@@ -502,339 +456,6 @@ internal sealed class PoopCommands : IModule
         }
 
         return ECommandAction.Handled;
-    }
-
-    /// <summary>
-    /// Command: !poop_size
-    /// Spawns a poop with specific size
-    /// </summary>
-    private ECommandAction OnPoopSizeCommand(IGamePlayer player, StringCommand command)
-    {
-        _logger.LogInformation("{player} executed poop_size command with args: {args}", player.Name, command.ArgString);
-
-        // Fire OnPoopCommand event FIRST - allows blocking based on permissions/rules
-        if (_sharedInterface is SharedInterface.SharedInterface sharedInterface)
-        {
-            if (!sharedInterface.FirePoopCommand(player, "poop_size"))
-            {
-                // Command was cancelled by event handler
-                return ECommandAction.Handled;
-            }
-        }
-
-        // Fire-and-forget pattern
-        OnPoopSizeCommandAsync(player, command);
-        return ECommandAction.Handled;
-    }
-
-    /// <summary>
-    /// Async implementation of poop_size command
-    /// </summary>
-    private void OnPoopSizeCommandAsync(IGamePlayer player, StringCommand command)
-    {
-        try
-        {
-            // 1. Get player controller and validate
-            var controller = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-            if (controller == null)
-            {
-                _logger.LogWarning("Could not find controller for player {player} (slot {slot})", player.Name, player.Slot);
-                return;
-            }
-
-            var pawn = controller.GetPlayerPawn();
-            if (pawn == null || !pawn.IsValid())
-            {
-                controller.PrintToChat(_locale.GetString("poop.must_be_alive"));
-                return;
-            }
-
-            // 2. Parse size argument
-            if (string.IsNullOrWhiteSpace(command.ArgString))
-            {
-                controller.PrintToChat(_locale.GetString("size.usage"));
-                controller.PrintToChat(_locale.GetString("size.range", new Dictionary<string, object>
-                {
-                    ["minSize"] = _config.MinPoopSize,
-                    ["maxSize"] = _config.MaxPoopSize
-                }));
-                return;
-            }
-
-            if (!float.TryParse(command.ArgString.Trim(), out float requestedSize))
-            {
-                controller.PrintToChat(_locale.GetString("size.invalid_format", new Dictionary<string, object>
-                {
-                    ["minSize"] = _config.MinPoopSize,
-                    ["maxSize"] = _config.MaxPoopSize
-                }));
-                return;
-            }
-
-            // 3. Validate and clamp size
-            float size = Math.Clamp(requestedSize, _config.MinPoopSize, _config.MaxPoopSize);
-
-            // 4. Check cooldown
-            if (!ulong.TryParse(player.SteamId, out var steamId))
-            {
-                _logger.LogWarning("Invalid SteamID for player {player}: {steamId}", player.Name, player.SteamId);
-                return;
-            }
-
-            if (!_cooldowns.CanExecute("poop", steamId))
-            {
-                var remaining = _cooldowns.GetRemainingCooldown("poop", steamId);
-                controller.PrintToChat(_locale.GetString("common.cooldown", new Dictionary<string, object>
-                {
-                    ["remaining"] = remaining
-                }));
-                return;
-            }
-
-            // 5. Check max poops per round limit
-            if (_lifecycleManager.HasReachedMaxPoopsPerRound())
-            {
-                controller.PrintToChat(_locale.GetString("poop.max_per_round"));
-                return;
-            }
-
-            // 6. Get player position
-            var position = pawn.GetAbsOrigin();
-
-            // 7. Find nearest dead player
-            var victimInfo = _spawner.FindNearestDeadPlayer(position, player.Slot);
-            string? victimName = victimInfo?.PlayerName;
-
-            // 8. Get player's color preference from PoopPlayerManager (handles cache)
-            // Check if color preferences are enabled
-            if (_config.EnableColorPreferences)
-            {
-                // Run color preference fetch on background thread (may hit database)
-                Task.Run(async () =>
-                {
-                    try
-                    {
-                        var colorPref = await _poopPlayerManager.GetColorPreferenceAsync(steamId);
-
-                        // If random mode, get a random color each time
-                        if (colorPref.IsRandom)
-                        {
-                            colorPref = _colorMenu.GetRandomColor();
-                        }
-
-                        // Marshal back to main thread to spawn poop
-                        await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                        {
-                            _spawner.SpawnPoopWithFullLogic(
-                                player.SteamId,
-                                position,
-                                size,
-                                colorPref,
-                                victimName,
-                                victimInfo?.SteamId,
-                                playSounds: true,
-                                showMessages: true);
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error getting color preference for {player}, using default", player.Name);
-                        var (r, g, b) = _config.GetDefaultColorRgb();
-                        var defaultColorPref = new PoopColorPreference(r, g, b);
-                        
-                        await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                        {
-                            _spawner.SpawnPoopWithFullLogic(
-                                player.SteamId,
-                                position,
-                                size,
-                                defaultColorPref,
-                                victimName,
-                                victimInfo?.SteamId,
-                                playSounds: true,
-                                showMessages: true);
-                        });
-                    }
-                });
-            }
-            else
-            {
-                // Use default color when preferences are disabled
-                var (r, g, b) = _config.GetDefaultColorRgb();
-                var colorPref = new PoopColorPreference(r, g, b);
-                _spawner.SpawnPoopWithFullLogic(
-                    player.SteamId,
-                    position,
-                    size,
-                    colorPref,
-                    victimName,
-                    victimInfo?.SteamId,
-                    playSounds: true,
-                    showMessages: true);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in poop_size command for {player}", player.Name);
-            var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-            ctrl?.PrintToChat(_locale.GetString("common.error"));
-        }
-    }
-
-    /// <summary>
-    /// Command: !poop_rnd
-    /// Spawns a poop with completely random size
-    /// </summary>
-    private ECommandAction OnPoopRandomCommand(IGamePlayer player, StringCommand command)
-    {
-        _logger.LogInformation("{player} executed poop_rnd command", player.Name);
-
-        // Fire OnPoopCommand event FIRST - allows blocking based on permissions/rules
-        if (_sharedInterface is SharedInterface.SharedInterface sharedInterface)
-        {
-            if (!sharedInterface.FirePoopCommand(player, "poop_rnd"))
-            {
-                // Command was cancelled by event handler
-                return ECommandAction.Handled;
-            }
-        }
-
-        // Fire-and-forget pattern
-        OnPoopRandomCommandAsync(player);
-        return ECommandAction.Handled;
-    }
-
-    /// <summary>
-    /// Async implementation of poop_rnd command
-    /// </summary>
-    private void OnPoopRandomCommandAsync(IGamePlayer player)
-    {
-        try
-        {
-            // 1. Get player controller and validate
-            var controller = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-            if (controller == null)
-            {
-                _logger.LogWarning("Could not find controller for player {player} (slot {slot})", player.Name, player.Slot);
-                return;
-            }
-
-            var pawn = controller.GetPlayerPawn();
-            if (pawn == null || !pawn.IsValid())
-            {
-                controller.PrintToChat(_locale.GetString("poop.must_be_alive"));
-                return;
-            }
-
-            // 2. Check cooldown
-            if (!ulong.TryParse(player.SteamId, out var steamId))
-            {
-                _logger.LogWarning("Invalid SteamID for player {player}: {steamId}", player.Name, player.SteamId);
-                return;
-            }
-
-            if (!_cooldowns.CanExecute("poop", steamId))
-            {
-                var remaining = _cooldowns.GetRemainingCooldown("poop", steamId);
-                controller.PrintToChat(_locale.GetString("common.cooldown", new Dictionary<string, object>
-                {
-                    ["remaining"] = remaining
-                }));
-                return;
-            }
-
-            // 3. Check max poops per round limit
-            if (_lifecycleManager.HasReachedMaxPoopsPerRound())
-            {
-                controller.PrintToChat(_locale.GetString("poop.max_per_round"));
-                return;
-            }
-
-            // 4. Generate truly random size (not rarity-based like normal !poop)
-            float size = _config.MinPoopSize + (float)(_random.NextDouble() * (_config.MaxPoopSize - _config.MinPoopSize));
-            size = (float)Math.Round(size * 1000) / 1000; // Round to 3 decimal places
-
-            // 4. Get player position
-            var position = pawn.GetAbsOrigin();
-
-            // 5. Find nearest dead player
-            var victimInfo = _spawner.FindNearestDeadPlayer(position, player.Slot);
-            string? victimName = victimInfo?.PlayerName;
-
-            // 6. Get player's color preference from PoopPlayerManager (handles cache)
-            // Check if color preferences are enabled
-            if (_config.EnableColorPreferences)
-            {
-                // Run color preference fetch on background thread (may hit database)
-                Task.Run(async () =>
-                {
-                    try
-                    {
-                        var colorPref = await _poopPlayerManager.GetColorPreferenceAsync(steamId);
-
-                        // If random mode, get a random color each time
-                        if (colorPref.IsRandom)
-                        {
-                            colorPref = _colorMenu.GetRandomColor();
-                        }
-
-                        // Marshal back to main thread to spawn poop
-                        await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                        {
-                            _spawner.SpawnPoopWithFullLogic(
-                                player.SteamId,
-                                position,
-                                size,
-                                colorPref,
-                                victimName,
-                                victimInfo?.SteamId,
-                                playSounds: true,
-                                showMessages: true);
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error getting color preference for {player}, using default", player.Name);
-                        var (r, g, b) = _config.GetDefaultColorRgb();
-                        var defaultColorPref = new PoopColorPreference(r, g, b);
-                        
-                        await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                        {
-                            _spawner.SpawnPoopWithFullLogic(
-                                player.SteamId,
-                                position,
-                                size,
-                                defaultColorPref,
-                                victimName,
-                                victimInfo?.SteamId,
-                                playSounds: true,
-                                showMessages: true);
-                        });
-                    }
-                });
-            }
-            else
-            {
-                // Use default color when preferences are disabled
-                var (r, g, b) = _config.GetDefaultColorRgb();
-                var colorPref = new PoopColorPreference(r, g, b);
-                _spawner.SpawnPoopWithFullLogic(
-                    player.SteamId,
-                    position,
-                    size,
-                    colorPref,
-                    victimName,
-                    victimInfo?.SteamId,
-                    playSounds: true,
-                    showMessages: true);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in poop_rnd command for {player}", player.Name);
-            var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-            ctrl?.PrintToChat(_locale.GetString("common.error"));
-        }
     }
 
     /// <summary>
@@ -853,19 +474,19 @@ internal sealed class PoopCommands : IModule
             {
                 if (!int.TryParse(command.ArgString.Trim(), out sampleCount) || sampleCount <= 0)
                 {
-                    _bridge.ModSharp.LogMessage("Invalid count. Please provide a positive number.");
+                    _logger.LogInformation("Invalid count. Please provide a positive number.");
                     return ECommandAction.Handled;
                 }
 
                 // Cap at reasonable maximum
                 if (sampleCount > 100000)
                 {
-                    _bridge.ModSharp.LogMessage("Count limited to 100,000 to prevent performance issues.");
+                    _logger.LogInformation("Count limited to 100,000 to prevent performance issues.");
                     sampleCount = 100000;
                 }
             }
 
-            _bridge.ModSharp.LogMessage($"Simulating {sampleCount} poop generations...");
+            _logger.LogInformation($"Simulating {sampleCount} poop generations...");
 
             // 2. Track statistics
             float minSize = float.MaxValue;
@@ -892,7 +513,7 @@ internal sealed class PoopCommands : IModule
             // 3. Simulate many generations
             for (int i = 0; i < sampleCount; i++)
             {
-                float size = _spawner.GetRandomPoopSize();
+                float size = _sizeGenerator.GetRandomSize();
 
                 // Update statistics
                 minSize = Math.Min(minSize, size);
@@ -923,34 +544,34 @@ internal sealed class PoopCommands : IModule
             float avgSize = totalSize / sampleCount;
 
             // 5. Display results
-            _bridge.ModSharp.LogMessage($"=== Poop Size Distribution ({sampleCount} samples) ===");
-            _bridge.ModSharp.LogMessage($"Min: {minSize:F3}, Max: {maxSize:F3}, Avg: {avgSize:F3}");
-            _bridge.ModSharp.LogMessage("Size categories:");
+            _logger.LogInformation($"=== Poop Size Distribution ({sampleCount} samples) ===");
+            _logger.LogInformation($"Min: {minSize:F3}, Max: {maxSize:F3}, Avg: {avgSize:F3}");
+            _logger.LogInformation("Size categories:");
 
             foreach (var category in sizeCategories)
             {
                 float percentage = (float)category.Value / sampleCount * 100;
-                _bridge.ModSharp.LogMessage($"{category.Key}: {category.Value} ({percentage:F2}%)");
+                _logger.LogInformation($"{category.Key}: {category.Value} ({percentage:F2}%)");
             }
 
             // Show legendary sizes if any exist
             if (legendaryExactSizes.Count > 0)
             {
-                _bridge.ModSharp.LogMessage("Legendary sizes found:");
+                _logger.LogInformation("Legendary sizes found:");
                 foreach (var legendary in legendaryExactSizes.OrderByDescending(x => x.Key))
                 {
-                    _bridge.ModSharp.LogMessage($"Size {legendary.Key:F3}: {legendary.Value} times");
+                    _logger.LogInformation($"Size {legendary.Key:F3}: {legendary.Value} times");
                 }
             }
 
-            _bridge.ModSharp.LogMessage("=== End of Report ===");
+            _logger.LogInformation("=== End of Report ===");
 
             _logger.LogInformation("Completed poop_dryrun simulation with {count} samples", sampleCount);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in poop_dryrun command");
-            _bridge.ModSharp.LogMessage("Error running dryrun simulation.");
+            _logger.LogInformation("Error running dryrun simulation.");
         }
 
         return ECommandAction.Handled;

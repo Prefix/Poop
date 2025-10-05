@@ -1,3 +1,5 @@
+using Sharp.Shared.Units;
+
 namespace Prefix.Poop.Shared.Models;
 
 /// <summary>
@@ -13,7 +15,7 @@ public sealed class PoopStats
     /// <summary>
     /// Player's SteamID64
     /// </summary>
-    public string SteamId { get; set; } = string.Empty;
+    public SteamID SteamId { get; set; }
 
     /// <summary>
     /// Total number of poops placed by this player

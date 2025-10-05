@@ -121,13 +121,10 @@ internal class EventManager(InterfaceBridge bridge, ILogger<EventManager> logger
     /// </summary>
     public void PrintToCenterHtml(IPlayerController controller, string message, int duration = 5)
     {
-        logger.LogDebug($"[PrintToCenterHtml] Attempting to send message to {controller.PlayerName} (SteamID: {controller.SteamId})");
-        logger.LogDebug($"[PrintToCenterHtml] Message: {message}, Duration: {duration}");
 
         // Create the show_survival_respawn_status event
         if (bridge.EventManager.CreateEvent("show_survival_respawn_status", true) is not { } e)
         {
-            logger.LogWarning("Failed to create show_survival_respawn_status event for PrintToCenterHtml");
             return;
         }
 
@@ -139,7 +136,6 @@ internal class EventManager(InterfaceBridge bridge, ILogger<EventManager> logger
             }
             client)
         {
-            logger.LogWarning($"[PrintToCenterHtml] Failed to get valid client for SteamID: {controller.SteamId}");
             e.Dispose();
             return;
         }
@@ -149,7 +145,5 @@ internal class EventManager(InterfaceBridge bridge, ILogger<EventManager> logger
         e.SetInt("duration", duration);
         e.FireToClient(client);
         e.Dispose();
-
-        logger.LogDebug($"[PrintToCenterHtml] Successfully sent message to {controller.PlayerName}");
     }
 }

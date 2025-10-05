@@ -2,16 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Prefix.Poop.Interfaces.Database;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Modules;
 using Prefix.Poop.Interfaces.Modules.Player;
 using Prefix.Poop.Interfaces.PoopModule;
+using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Prefix.Poop.Shared.Models;
 using Prefix.Poop.Utils;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
+using Sharp.Shared.Objects;
 using Sharp.Shared.Types;
+using Sharp.Shared.Units;
+using IRagdollTracker = Prefix.Poop.Interfaces.PoopModule.Lifecycle.IRagdollTracker;
 using Vector = Sharp.Shared.Types.Vector;
 
 namespace Prefix.Poop.Modules.PoopModule;
@@ -28,6 +31,7 @@ internal sealed class PoopSpawner(
     IRainbowPoopTracker rainbowTracker,
     IConfigManager config,
     ILocaleManager locale,
+    IPoopSizeGenerator sizeGenerator,
     IPoopDatabase database,
     IPlayerManager playerManager)
     : IPoopSpawner
@@ -45,9 +49,8 @@ internal sealed class PoopSpawner(
     /// <param name="position">World position to spawn the poop</param>
     /// <param name="size">Size multiplier (-1 for random)</param>
     /// <param name="color">Optional color override</param>
-    /// <param name="victimName">Name of the victim being pooped on</param>
     /// <returns>Spawn result with entity, size, position, and victim info</returns>
-    public SpawnPoopResult SpawnPoop(Vector position, float size = -1.0f, PoopColorPreference? color = null, string? victimName = null)
+    public SpawnPoopResult SpawnPoop(Vector position, float size = -1.0f, PoopColorPreference? color = null)
     {
         try
         {
@@ -55,25 +58,23 @@ internal sealed class PoopSpawner(
             var entity = bridge.EntityManager.CreateEntityByName<IBaseModelEntity>("prop_physics");
             if (entity == null)
             {
-                logger.LogError("Failed to create poop entity (CreateEntityByName returned null)");
-                return new SpawnPoopResult { Entity = null, Size = 0, Position = position, VictimName = victimName };
+                return new SpawnPoopResult { Entity = null, Size = 0, Position = position };
             }
             // Configure spawn flags
             entity.SpawnFlags = (uint)(
-                SpawnFlags.SF_PHYSPROP_DEBRIS |       // Don't collide with players
-                SpawnFlags.SF_PHYSPROP_TOUCH |        // Can be crashed through
-                SpawnFlags.SF_PHYSPROP_FORCE_TOUCH_TRIGGERS
+                SpawnFlags.PhysPropDebris |       // Don't collide with players
+                SpawnFlags.PhysPropTouch |        // Can be crashed through
+                SpawnFlags.PhysPropForceTouchTriggers
             );
 
             // Determine size
-            float poopSize = size > 0 ? size : GetRandomPoopSize();
+            float poopSize = size > 0 ? size : sizeGenerator.GetRandomSize();
             float massFactor = poopSize * 0.05f;
 
             // Get color for spawn
             var poopColor = GetPoopColor(color);
 
             // Spawn the entity with all properties set via key values
-            logger.LogInformation("Spawning poop model -> {_config.PoopModel}", config.PoopModel);
             entity.DispatchSpawn(
                 new Dictionary<string, KeyValuesVariantValueItem>
                 {
@@ -89,9 +90,6 @@ internal sealed class PoopSpawner(
             entity.SetCollisionGroup(CollisionGroupType.InteractiveDebris);
             entity.CollisionRulesChanged();
 
-            logger.LogDebug("Spawned poop at ({x}, {y}, {z}) with size {size}",
-                position.X, position.Y, position.Z, poopSize);
-
             // Track poop for lifecycle management (lifetime, cleanup, etc.)
             lifecycleManager.TrackPoop(entity);
 
@@ -99,7 +97,6 @@ internal sealed class PoopSpawner(
             if (color?.IsRainbow == true)
             {
                 rainbowTracker.TrackRainbowPoop(entity);
-                logger.LogDebug("Tracked rainbow poop entity for color cycling");
             }
 
             return new SpawnPoopResult
@@ -107,13 +104,12 @@ internal sealed class PoopSpawner(
                 Entity = entity,
                 Size = poopSize,
                 Position = position,
-                VictimName = victimName
             };
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error spawning poop entity");
-            return new SpawnPoopResult { Entity = null, Size = 0, Position = position, VictimName = victimName };
+            return new SpawnPoopResult { Entity = null, Size = 0, Position = position };
         }
     }
 
@@ -134,81 +130,33 @@ internal sealed class PoopSpawner(
     }
 
     /// <summary>
-    /// Generates a random poop size based on rarity configuration
-    /// </summary>
-    public float GetRandomPoopSize()
-    {
-        // Use configured default size
-        float defaultSize = config.DefaultPoopSize;
-        float minSize = config.MinPoopSize;
-        float maxSize = config.MaxPoopSize;
-
-        // Get chance percentages
-        int commonChance = config.CommonSizeChance;
-        int smallChance = config.SmallSizeChance;
-        int unused = config.RareSizeChance;
-
-        int roll = _random.Next(1, 101); // Roll 1-100
-
-        float sizeValue;
-        string sizeCategory;
-
-        if (roll <= commonChance) // Common sizes (85% default)
-        {
-            // Normal sizes around default (0.9 - 1.1 of default)
-            sizeCategory = "Common";
-            sizeValue = defaultSize * (0.9f + (float)(_random.NextDouble() * 0.2f));
-        }
-        else if (roll <= commonChance + smallChance) // Small sizes (10% default)
-        {
-            // Small sizes (min to 0.9 of default)
-            sizeCategory = "Small";
-            float range = (defaultSize * 0.9f) - minSize;
-            sizeValue = minSize + (float)(_random.NextDouble() * range);
-        }
-        else // Rare sizes (5% default)
-        {
-            // Large sizes (1.1 of default to max)
-            sizeCategory = "Rare";
-            float range = maxSize - (defaultSize * 1.1f);
-            sizeValue = (defaultSize * 1.1f) + (float)(_random.NextDouble() * range);
-        }
-
-        // Clamp to configured min/max
-        sizeValue = Math.Clamp(sizeValue, minSize, maxSize);
-
-        // Round to 3 decimal places
-        sizeValue = MathF.Round(sizeValue * 1000) / 1000;
-
-        logger.LogDebug("Generated {category} poop with size {size:F3}", sizeCategory, sizeValue);
-
-        return sizeValue;
-    }
-
-    /// <summary>
     /// Finds the nearest dead player to a position
     /// </summary>
-    /// <param name="position">Position to search from</param>
-    /// <param name="pooperSlot">Slot of the player doing the pooping (to exclude)</param>
+    /// <param name="pooper">The player doing the pooping (to exclude from search)</param>
     /// <returns>Information about the nearest dead player or null</returns>
-    public DeadPlayerInfo? FindNearestDeadPlayer(Vector position, int pooperSlot)
+    public DeadPlayerInfo? FindNearestDeadPlayer(IGameClient? pooper)
     {
         // Check config to determine which detection method to use
         if (config.UseRagdollVictimDetection)
         {
-            return FindNearestDeadPlayerRagdoll(position, pooperSlot);
+            return FindNearestDeadPlayerRagdoll(pooper);
         }
         else
         {
-            return FindNearestDeadPlayerTraditional(position, pooperSlot);
+            return FindNearestDeadPlayerTraditional(pooper);
         }
     }
 
     /// <summary>
     /// Finds nearest dead player using ragdoll entity detection
     /// </summary>
-    private DeadPlayerInfo? FindNearestDeadPlayerRagdoll(Vector position, int pooperSlot)
+    private DeadPlayerInfo? FindNearestDeadPlayerRagdoll(IGameClient? pooper)
     {
+        if (pooper == null || !pooper.IsValid)
+        {
+            return null;
+        }
+        Vector position = playerManager.GetController(pooper)?.GetAbsOrigin() ?? new Vector(0, 0, 0);
         try
         {
             DeadPlayerInfo? closest = null;
@@ -219,17 +167,17 @@ internal sealed class PoopSpawner(
             foreach (var entry in ragdollTracker.Ragdolls)
             {
                 // Skip the pooper themselves
-                if (entry.Key == pooperSlot)
+                if (entry.Key == pooper)
                     continue;
 
-                var ragdoll = entry.Value;
+                var ragdollInfo = entry.Value;
 
                 // Validate ragdoll
-                if (!ragdoll.IsValid())
+                if (!ragdollInfo.Ragdoll.IsValid())
                     continue;
 
                 // Get ragdoll position
-                var ragdollPos = ragdoll.GetAbsOrigin();
+                var ragdollPos = ragdollInfo.Ragdoll.GetAbsOrigin();
 
                 // Calculate distance squared from player to this ragdoll (faster than distance)
                 float distSq = position.DistanceSquared(ragdollPos);
@@ -237,25 +185,15 @@ internal sealed class PoopSpawner(
                 // Check if within max range AND closer than current closest
                 if (distSq < maxDistSq && distSq < closestDistSq)
                 {
-                    // Get player name from dead player tracker (same slot)
-                    string playerName = "Unknown Player";
-                    if (deadPlayerTracker.DeadPlayers.TryGetValue(entry.Key, out var deadPlayerInfo))
-                    {
-                        playerName = deadPlayerInfo.PlayerName;
-                    }
-
-                    closest = new DeadPlayerInfo(ragdollPos, playerName);
+                    closest = new DeadPlayerInfo(ragdollPos, entry.Key);
                     closestDistSq = distSq;
-
-                    logger.LogDebug("Found ragdoll at distance {dist:F2} (name: {name})",
-                        MathF.Sqrt(distSq), playerName);
                 }
             }
 
             if (closest != null)
             {
                 logger.LogInformation("Ragdoll detection: Found nearest dead player '{name}' at distance {dist:F2}",
-                    closest.PlayerName, MathF.Sqrt(closestDistSq));
+                    closest.Player?.Name ?? "Unknown", MathF.Sqrt(closestDistSq));
             }
             else
             {
@@ -275,8 +213,23 @@ internal sealed class PoopSpawner(
     /// <summary>
     /// Finds nearest dead player using traditional tracked dead player positions
     /// </summary>
-    private DeadPlayerInfo? FindNearestDeadPlayerTraditional(Vector position, int pooperSlot)
+    private DeadPlayerInfo? FindNearestDeadPlayerTraditional(IGameClient? pooper)
     {
+        if (pooper == null || !pooper.IsValid)
+        {
+            return null;
+        }
+        IPlayerController? controller = playerManager.GetController(pooper);
+        if (controller == null || !controller.IsValid())
+        {
+            return null;
+        }
+        IPlayerPawn? pawn = controller.GetPlayerPawn();
+        if (pawn == null || !pawn.IsValid())
+        {
+            return null;
+        }
+        Vector position = pawn.GetAbsOrigin();
         try
         {
             DeadPlayerInfo? closest = null;
@@ -286,7 +239,7 @@ internal sealed class PoopSpawner(
             foreach (var entry in deadPlayerTracker.DeadPlayers)
             {
                 // Skip the pooper themselves
-                if (entry.Key == pooperSlot)
+                if (entry.Key == pooper)
                     continue;
 
                 // Calculate distance squared from player to this dead player
@@ -303,7 +256,7 @@ internal sealed class PoopSpawner(
             if (closest != null)
             {
                 logger.LogInformation("Traditional tracking: Found nearest dead player '{name}' at distance {dist:F2}",
-                    closest.PlayerName, MathF.Sqrt(closestDistSq));
+                    closest.Player?.Name ?? "Unknown", MathF.Sqrt(closestDistSq));
             }
             else
             {
@@ -322,52 +275,81 @@ internal sealed class PoopSpawner(
 
     /// <summary>
     /// Spawns a poop with complete logic including sounds, messages, and database logging
+    /// Automatically obtains position from player's pawn and finds nearest dead player as victim
     /// Must be called from the main game thread
     /// </summary>
     public SpawnPoopResult SpawnPoopWithFullLogic(
-        string playerSteamId,
-        Vector position,
+        IGameClient? player,
         float size,
         PoopColorPreference colorPreference,
-        string? victimName = null,
-        string? victimSteamId = null,
         bool playSounds = true,
         bool showMessages = true)
     {
-        var playerName = playerManager.GetPlayerBySteamId(playerSteamId)?.Name ?? "Unknown";
+        // Validate and extract player information upfront
+        if (player == null || !player.IsValid)
+        {
+            logger.LogWarning("SpawnPoopWithFullLogic called with invalid player");
+            return new SpawnPoopResult();
+        }
+
+        // Get controller and pawn
+        var playerController = playerManager.GetController(player);
+        if (playerController == null || !playerController.IsValid())
+        {
+            logger.LogWarning("SpawnPoopWithFullLogic: Player has no valid controller");
+            return new SpawnPoopResult();
+        }
+
+        var pawn = playerController.GetPlayerPawn();
+        if (pawn == null || !pawn.IsValid())
+        {
+            logger.LogWarning("SpawnPoopWithFullLogic: Player has no valid pawn");
+            return new SpawnPoopResult();
+        }
+
+        var position = pawn.GetAbsOrigin();
+
+        string playerName = player.Name;
+        SteamID playerSteamId = player.SteamId;
+        
+        // Find nearest dead player automatically
+        var victimInfo = FindNearestDeadPlayer(player);
+        var victim = victimInfo?.Player;
+        
+        // Extract victim information if present
+        string? victimName = victim?.Name;
+        SteamID? victimSteamId = victim?.SteamId;
 
         // Spawn the poop using the low-level spawner
-        var result = SpawnPoop(position, size, colorPreference, victimName);
+        var result = SpawnPoop(position, size, colorPreference);
 
         if (result.Entity == null)
         {
-            logger.LogError("Failed to spawn poop for {player}", playerName);
+            logger.LogError("Failed to spawn poop at position {position}", position);
             
             // Fire internal event for failed spawn
-            PoopSpawnedInternal?.Invoke(new PoopSpawnedInternalEventArgs
-            {
-                PlayerSteamId = playerSteamId,
+            PoopSpawnedInternal?.Invoke(new PoopSpawnedInternalEventArgs 
+            { 
+                Player = player,
                 Position = position,
                 Size = size,
-                VictimName = victimName,
-                VictimSteamId = victimSteamId,
-                Success = false
+                Victim = victim,
+                Success = false 
             });
             
             return result;
         }
 
-        float poopSize = result.Size;
-        string sizeDesc = GetSizeDescription(poopSize);
+        float poopSize = result.Size ?? size;
+        string sizeDesc = sizeGenerator.GetSizeDescription(poopSize);
 
         // Fire internal event for successful spawn
         PoopSpawnedInternal?.Invoke(new PoopSpawnedInternalEventArgs
         {
-            PlayerSteamId = playerSteamId,
+            Player = player,
             Position = position,
             Size = poopSize,
-            VictimName = victimName,
-            VictimSteamId = victimSteamId,
+            Victim = victim,
             Success = true
         });
 
@@ -383,21 +365,21 @@ internal sealed class PoopSpawner(
         if (showMessages && config.ShowMessageOnPoop)
         {
             // Special announcement for MASSIVE poops (size >= 2.0)
-            if (poopSize >= 2.0f)
+            if (sizeGenerator.IsMassive(poopSize))
             {
                 bridge.ModSharp.PrintToChatAll(
-                    ControllerExtensions.FormatChatMessage(locale.GetString("poop.spawned_massive", new Dictionary<string, object>
+                    Format.ChatMessage(locale.GetString("poop.spawned_massive", new Dictionary<string, object>
                     {
                         ["playerName"] = playerName,
                         ["sizeDesc"] = sizeDesc,
                         ["size"] = poopSize
                     })));
             }
-            else if (victimName != null)
+            else if (victim != null && victimName != null)
             {
                 // Announce to all players in chat with size info
                 bridge.ModSharp.PrintToChatAll(
-                    ControllerExtensions.FormatChatMessage(locale.GetString("poop.spawned_on_player", new Dictionary<string, object>
+                    Format.ChatMessage(locale.GetString("poop.spawned_on_player", new Dictionary<string, object>
                     {
                         ["playerName"] = playerName,
                         ["victimName"] = victimName,
@@ -408,31 +390,27 @@ internal sealed class PoopSpawner(
             else
             {
                 // No victim - spawn at player's position, show size to player only
-                IGamePlayer? player = playerManager.GetPlayerBySteamId(playerSteamId);
-                if (player != null && player.IsValid())
+                var controller = playerManager.GetController(player);
+                controller?.PrintToChat(locale.GetString("poop.spawned_self", new Dictionary<string, object>
                 {
-                    IPlayerController? controller = player.Controller;
-                    controller?.PrintToChat(locale.GetString("poop.spawned_self", new Dictionary<string, object>
-                    {
-                        ["sizeDesc"] = sizeDesc,
-                        ["size"] = poopSize
-                    }));
-                }
+                    ["sizeDesc"] = sizeDesc,
+                    ["size"] = poopSize
+                }));
             }
         }
 
         // Save to database (background thread)
         var currentMap = bridge.ModSharp.GetMapName() ?? "unknown";
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             try
             {
                 var logRecord = new PoopLogRecord
                 {
                     PlayerName = playerName,
-                    PlayerSteamId = playerSteamId,
+                    PlayerSteamId = playerSteamId.ToString(),
                     TargetName = victimName,
-                    TargetSteamId = victimSteamId,
+                    TargetSteamId = victimSteamId?.ToString(),
                     MapName = currentMap,
                     PoopSize = poopSize,
                     PoopColorR = colorPreference.Red,
@@ -449,16 +427,16 @@ internal sealed class PoopSpawner(
                 logger.LogDebug("Logged poop event #{id} for {player}", logId, playerName);
 
                 // If there was a victim, display victim count
-                if (!string.IsNullOrEmpty(victimSteamId) && victimName != null)
+                if (victimSteamId != null && victimName != null)
                 {
-                    int victimCount = await database.GetVictimPoopCountAsync(victimSteamId);
+                    int victimCount = await database.GetVictimPoopCountAsync(victimSteamId.Value);
 
                     if (victimCount > 0)
                     {
                         await bridge.ModSharp.InvokeFrameActionAsync(() =>
                         {
                             bridge.ModSharp.PrintToChatAll(
-                                ControllerExtensions.FormatChatMessage(locale.GetString("leaderboard.victim_total_count", new Dictionary<string, object>
+                                Format.ChatMessage(locale.GetString("leaderboard.victim_total_count", new Dictionary<string, object>
                                 {
                                     ["victimName"] = victimName,
                                     ["count"] = victimCount
@@ -474,22 +452,6 @@ internal sealed class PoopSpawner(
         });
 
         return result;
-    }
-
-    /// <summary>
-    /// Gets a descriptive name for a poop size with color codes using localization
-    /// </summary>
-    private string GetSizeDescription(float size)
-    {
-        if (size >= 2.5f) return locale.GetString("size.legendary");
-        if (size >= 2.0f) return locale.GetString("size.desc_massive");
-        if (size >= 1.7f) return locale.GetString("size.desc_huge");
-        if (size >= 1.4f) return locale.GetString("size.desc_large");
-        if (size >= 1.1f) return locale.GetString("size.desc_above_average");
-        if (size >= 0.9f) return locale.GetString("size.desc_normal");
-        if (size >= 0.7f) return locale.GetString("size.desc_small");
-        if (size >= 0.5f) return locale.GetString("size.desc_tiny");
-        return locale.GetString("size.desc_microscopic");
     }
 
     public bool Init()

@@ -1,28 +1,49 @@
 using System;
 using System.Collections.Generic;
-using Prefix.Poop.Shared.Models;
-using Sharp.Shared.Types;
+using Sharp.Shared.GameEntities;
+using Sharp.Shared.Objects;
+using Sharp.Shared.Units;
 using Vector = Sharp.Shared.Types.Vector;
 
 namespace Prefix.Poop.Modules.PoopModule;
 
 /// <summary>
 /// Stores information about a dead player for poop placement
+/// Used by DeadPlayerTracker and ragdoll detection to track death locations
 /// </summary>
-public sealed class DeadPlayerInfo
+public sealed class DeadPlayerInfo(Vector position, IGameClient? player)
 {
-    public Vector Position { get; }
-    public string PlayerName { get; }
-    public string? SteamId { get; }
-    public DateTime DeathTime { get; }
+    /// <summary>
+    /// The world position where the player died
+    /// </summary>
+    public Vector Position { get; } = position;
+    
+    /// <summary>
+    /// The game client (player) associated with this death location
+    /// </summary>
+    public IGameClient? Player { get; set; } = player;
+}
 
-    public DeadPlayerInfo(Vector position, string playerName, string? steamId = null)
-    {
-        Position = position;
-        PlayerName = playerName;
-        SteamId = steamId;
-        DeathTime = DateTime.UtcNow;
-    }
+/// <summary>
+/// Stores information about a ragdoll entity associated with a dead player
+/// Used by RagdollTracker to maintain ragdoll-to-player associations for poop placement
+/// </summary>
+public sealed class RagdollInfo(IBaseEntity ragdoll, IGameClient? player)
+{
+    /// <summary>
+    /// The ragdoll entity
+    /// </summary>
+    public IBaseEntity Ragdoll { get; } = ragdoll;
+    
+    /// <summary>
+    /// The game client (player) who owns this ragdoll
+    /// </summary>
+    public IGameClient? Player { get; } = player;
+    
+    /// <summary>
+    /// When the ragdoll was spawned (tracked)
+    /// </summary>
+    public DateTime SpawnTime { get; } = DateTime.UtcNow;
 }
 
 /// <summary>
@@ -49,20 +70,118 @@ internal sealed class PoopSizeConfig
     public float DefaultPoopSize { get; set; } = 1.0f;
 
     /// <summary>
-    /// Chance for common size (85%)
+    /// Generation tiers for size randomization
+    /// Each tier has a chance percentage and size range multiplier
     /// </summary>
-    public int CommonSizeChance { get; set; } = 85;
+    public List<PoopSizeGenerationTier> GenerationTiers { get; set; } = new()
+    {
+        new() { Chance = 40, Name = "Normal", MinMultiplier = 0.9f, MaxMultiplier = 1.1f },
+        new() { Chance = 25, Name = "Above Average", MinMultiplier = 1.1f, MaxMultiplier = 1.4f },
+        new() { Chance = 15, Name = "Small", MinMultiplier = 0.7f, MaxMultiplier = 0.9f },
+        new() { Chance = 10, Name = "Large", MinMultiplier = 1.4f, MaxMultiplier = 1.7f },
+        new() { Chance = 5, Name = "Tiny", MinMultiplier = 0.5f, MaxMultiplier = 0.7f },
+        new() { Chance = 3, Name = "Huge", MinMultiplier = 1.7f, MaxMultiplier = 2.0f },
+        new() { Chance = 2, Name = "Rare", MinMultiplier = 2.0f, MaxMultiplier = 2.6f }
+    };
 
     /// <summary>
-    /// Chance for small size (10%)
+    /// Dynamic size categories with thresholds and locale keys
+    /// Categories are checked from top to bottom (largest to smallest)
     /// </summary>
-    public int SmallSizeChance { get; set; } = 10;
+    public List<PoopSizeCategory> SizeCategories { get; set; } = new()
+    {
+        new() { Threshold = 2.5f, LocaleKey = "size.legendary" },
+        new() { Threshold = 2.0f, LocaleKey = "size.desc_massive" },
+        new() { Threshold = 1.7f, LocaleKey = "size.desc_huge" },
+        new() { Threshold = 1.4f, LocaleKey = "size.desc_large" },
+        new() { Threshold = 1.1f, LocaleKey = "size.desc_above_average" },
+        new() { Threshold = 0.9f, LocaleKey = "size.desc_normal" },
+        new() { Threshold = 0.7f, LocaleKey = "size.desc_small" },
+        new() { Threshold = 0.5f, LocaleKey = "size.desc_tiny" },
+        new() { Threshold = 0.0f, LocaleKey = "size.desc_microscopic" }
+    };
 
     /// <summary>
-    /// Chance for rare/large size (5%)
-    /// Calculated as: 100 - CommonSizeChance - SmallSizeChance
+    /// Threshold for "massive" poop announcements (global chat message)
     /// </summary>
-    public int RareSizeChance => 100 - CommonSizeChance - SmallSizeChance;
+    public float MassiveAnnouncementThreshold { get; set; } = 2.0f;
+}
+
+/// <summary>
+/// Defines a size category with its threshold and localization key
+/// </summary>
+internal sealed class PoopSizeCategory
+{
+    /// <summary>
+    /// Minimum size for this category (inclusive)
+    /// </summary>
+    public float Threshold { get; set; }
+
+    /// <summary>
+    /// Localization key for this size category
+    /// </summary>
+    public string LocaleKey { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Defines a generation tier for size randomization
+/// </summary>
+internal sealed class PoopSizeGenerationTier
+{
+    /// <summary>
+    /// Chance percentage for this tier (0-100)
+    /// </summary>
+    public int Chance { get; set; }
+
+    /// <summary>
+    /// Name/category of this tier for logging
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Minimum size multiplier (relative to DefaultPoopSize)
+    /// </summary>
+    public float MinMultiplier { get; set; }
+
+    /// <summary>
+    /// Maximum size multiplier (relative to DefaultPoopSize)
+    /// </summary>
+    public float MaxMultiplier { get; set; }
+
+    /// <summary>
+    /// Optional sub-tiers for weighted distribution within this tier's range
+    /// If defined, uses weighted probability instead of uniform distribution
+    /// Can be used for any tier - ultra-rare large sizes OR ultra-rare tiny sizes
+    /// </summary>
+    public List<PoopSizeSubTier>? SubTiers { get; set; }
+}
+
+/// <summary>
+/// Defines a sub-tier within a generation tier for advanced rarity distribution
+/// </summary>
+internal sealed class PoopSizeSubTier
+{
+    /// <summary>
+    /// Weight for this sub-tier (higher = more common)
+    /// Total weights across all sub-tiers determine probability
+    /// </summary>
+    public int Weight { get; set; }
+
+    /// <summary>
+    /// Name of this sub-tier for logging
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Minimum percentage of parent tier's range (0.0 - 1.0)
+    /// Example: 0.0 = start of parent range, 0.5 = middle, 1.0 = end
+    /// </summary>
+    public float MinRangePercent { get; set; }
+
+    /// <summary>
+    /// Maximum percentage of parent tier's range (0.0 - 1.0)
+    /// </summary>
+    public float MaxRangePercent { get; set; }
 }
 
 /// <summary>
@@ -93,7 +212,7 @@ internal sealed class PoopLogRecord
 internal sealed class TopPooperRecord
 {
     public string Name { get; set; } = string.Empty;
-    public string SteamId { get; set; } = string.Empty;
+    public SteamID SteamId { get; set; }
     public int PoopCount { get; set; }
 }
 
@@ -103,7 +222,7 @@ internal sealed class TopPooperRecord
 internal sealed class TopVictimRecord
 {
     public string Name { get; set; } = string.Empty;
-    public string SteamId { get; set; } = string.Empty;
+    public SteamID SteamId { get; set; }
     public int VictimCount { get; set; }
 }
 
@@ -112,13 +231,13 @@ internal sealed class TopVictimRecord
 /// </summary>
 internal sealed class RainbowPoopInfo
 {
-    public int EntityIndex { get; set; }
+    public IBaseModelEntity PoopEntity { get; set; }
     public float CurrentHue { get; set; }
     public DateTime SpawnTime { get; set; }
 
-    public RainbowPoopInfo(int entityIndex)
+    public RainbowPoopInfo(IBaseModelEntity poopEntity)
     {
-        EntityIndex = entityIndex;
+        PoopEntity = poopEntity;
         CurrentHue = 0.0f;
         SpawnTime = DateTime.UtcNow;
     }
@@ -127,35 +246,29 @@ internal sealed class RainbowPoopInfo
 /// <summary>
 /// Command cooldown tracker
 /// </summary>
-internal sealed class CommandCooldownTracker
+internal sealed class CommandCooldownTracker(int cooldownSeconds = 3)
 {
-    private readonly Dictionary<string, Dictionary<ulong, DateTime>> _cooldowns = new();
-    private readonly int _cooldownSeconds;
+    private readonly Dictionary<string, Dictionary<IGameClient, DateTime>> _cooldowns = new();
 
-    public CommandCooldownTracker(int cooldownSeconds = 3)
-    {
-        _cooldownSeconds = cooldownSeconds;
-    }
-
-    public bool CanExecute(string commandName, ulong steamId)
+    public bool CanExecute(string commandName, IGameClient player)
     {
         if (!_cooldowns.ContainsKey(commandName))
         {
-            _cooldowns[commandName] = new Dictionary<ulong, DateTime>();
+            _cooldowns[commandName] = new Dictionary<IGameClient, DateTime>();
         }
 
         var commandCooldowns = _cooldowns[commandName];
 
-        if (commandCooldowns.TryGetValue(steamId, out var lastUse))
+        if (commandCooldowns.TryGetValue(player, out var lastUse))
         {
             var timeSinceLastUse = DateTime.UtcNow - lastUse;
-            if (timeSinceLastUse.TotalSeconds < _cooldownSeconds)
+            if (timeSinceLastUse.TotalSeconds < cooldownSeconds)
             {
                 return false;
             }
         }
 
-        commandCooldowns[steamId] = DateTime.UtcNow;
+        commandCooldowns[player] = DateTime.UtcNow;
         return true;
     }
 
@@ -164,28 +277,28 @@ internal sealed class CommandCooldownTracker
         _cooldowns.Clear();
     }
 
-    public void ClearPlayer(ulong steamId)
+    public void ClearPlayer(IGameClient player)
     {
         foreach (var commandCooldowns in _cooldowns.Values)
         {
-            commandCooldowns.Remove(steamId);
+            commandCooldowns.Remove(player);
         }
     }
 
-    public double GetRemainingCooldown(string commandName, ulong steamId)
+    public double GetRemainingCooldown(string commandName, IGameClient player)
     {
         if (!_cooldowns.TryGetValue(commandName, out var commandCooldowns))
         {
             return 0;
         }
 
-        if (!commandCooldowns.TryGetValue(steamId, out var lastUse))
+        if (!commandCooldowns.TryGetValue(player, out var lastUse))
         {
             return 0;
         }
 
         var timeSinceLastUse = DateTime.UtcNow - lastUse;
-        var remaining = _cooldownSeconds - timeSinceLastUse.TotalSeconds;
+        var remaining = cooldownSeconds - timeSinceLastUse.TotalSeconds;
 
         return Math.Max(0, remaining);
     }

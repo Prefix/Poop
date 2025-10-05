@@ -2,12 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
-using Prefix.Poop.Interfaces;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
-using Sharp.Shared.GameEvents;
 using Sharp.Shared.Objects;
 
 namespace Prefix.Poop.Modules.PoopModule.Lifecycle;
@@ -15,11 +13,10 @@ namespace Prefix.Poop.Modules.PoopModule.Lifecycle;
 /// <summary>
 /// Manages poop entity lifecycle including tracking, lifetime timers, and cleanup
 /// </summary>
-internal sealed class PoopLifecycleManager : IPoopLifecycleManager, Interfaces.Modules.IPoopLifecycleManager
+internal sealed class PoopLifecycleManager : IPoopLifecycleManager
 {
     private readonly ILogger<PoopLifecycleManager> _logger;
     private readonly InterfaceBridge _bridge;
-    private readonly IEventManager _eventManager;
     private readonly IConfigManager _config;
 
     // Track poops with their removal timer IDs
@@ -36,12 +33,11 @@ internal sealed class PoopLifecycleManager : IPoopLifecycleManager, Interfaces.M
     {
         _logger = logger;
         _bridge = bridge;
-        _eventManager = eventManager;
         _config = config;
 
         // Listen to round events for cleanup
-        _eventManager.ListenEvent("round_start", OnRoundStart);
-        _eventManager.ListenEvent("round_end", OnRoundEnd);
+        eventManager.ListenEvent("round_start", OnRoundStart);
+        eventManager.ListenEvent("round_end", OnRoundEnd);
     }
 
     public bool Init()

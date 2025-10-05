@@ -1,7 +1,6 @@
-using Prefix.Poop.Interfaces;
 using Sharp.Shared.GameEntities;
 
-namespace Prefix.Poop.Interfaces.Modules;
+namespace Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 
 /// <summary>
 /// Interface for tracking and managing rainbow-colored poop entities

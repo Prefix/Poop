@@ -1,22 +1,34 @@
-using Prefix.Poop.Interfaces;
+using System.Collections.Generic;
+using Prefix.Poop.Modules.PoopModule;
+using Sharp.Shared.Units;
 
 namespace Prefix.Poop.Interfaces.Managers;
 
 /// <summary>
 /// Configuration manager interface for accessing plugin and module settings
+/// Organized into logical sections matching appsettings.json structure
 /// </summary>
 internal interface IConfigManager : IManager
 {
     /// <summary>
     /// Check if a SteamID is an admin
     /// </summary>
-    bool IsAdmin(string steamId);
+    bool IsAdmin(SteamID steamId);
 
+    // ===== ASSETS SECTION =====
+    
     /// <summary>
     /// Path to the poop model file
     /// </summary>
     string PoopModel { get; }
 
+    /// <summary>
+    /// Path to sound events file
+    /// </summary>
+    string SoundEventsFile { get; }
+
+    // ===== SIZE SECTION =====
+    
     /// <summary>
     /// Minimum poop size
     /// </summary>
@@ -33,30 +45,61 @@ internal interface IConfigManager : IManager
     float DefaultPoopSize { get; }
 
     /// <summary>
-    /// Chance percentage for common size poops
+    /// Threshold for massive poop announcements
     /// </summary>
-    int CommonSizeChance { get; }
+    float MassiveAnnouncementThreshold { get; }
 
     /// <summary>
-    /// Chance percentage for small size poops
+    /// Generation tiers for size randomization with sub-tier support
     /// </summary>
-    int SmallSizeChance { get; }
+    List<PoopSizeGenerationTier> GenerationTiers { get; }
 
     /// <summary>
-    /// Chance for rare/large size
+    /// Dynamic size categories with thresholds and locale keys
     /// </summary>
-    int RareSizeChance { get; }
+    List<PoopSizeCategory> SizeCategories { get; }
+
+    // ===== COLOR SECTION =====
+    
+    /// <summary>
+    /// Enable rainbow poop animation
+    /// </summary>
+    bool EnableRainbowPoops { get; }
 
     /// <summary>
-    /// Number of records to show in leaderboards
+    /// Rainbow animation speed multiplier
     /// </summary>
-    int TopRecordsLimit { get; }
+    float RainbowAnimationSpeed { get; }
 
     /// <summary>
-    /// Command cooldown in seconds
+    /// Enable player color preferences
     /// </summary>
-    int CommandCooldownSeconds { get; }
+    bool EnableColorPreferences { get; }
 
+    /// <summary>
+    /// Gets the default poop color as RGB tuple
+    /// </summary>
+    (int R, int G, int B) GetDefaultColorRgb();
+
+    // ===== SOUND SECTION =====
+    
+    /// <summary>
+    /// Enable sound effects
+    /// </summary>
+    bool EnableSounds { get; }
+
+    /// <summary>
+    /// Sound effect volume (0.0 to 1.0)
+    /// </summary>
+    float SoundVolume { get; }
+
+    /// <summary>
+    /// List of poop sound effect names
+    /// </summary>
+    string[] PoopSounds { get; }
+
+    // ===== VICTIM DETECTION SECTION =====
+    
     /// <summary>
     /// Maximum distance to find dead players
     /// </summary>
@@ -72,23 +115,44 @@ internal interface IConfigManager : IManager
     /// </summary>
     float RagdollDetectionDistance { get; }
 
+    // ===== GAMEPLAY SECTION =====
+    
     /// <summary>
     /// Show chat message when poop is placed
     /// </summary>
     bool ShowMessageOnPoop { get; }
 
     /// <summary>
-    /// Enable rainbow poop animation
+    /// Maximum poops per round (0 = unlimited)
     /// </summary>
-    bool EnableRainbowPoops { get; }
+    int MaxPoopsPerRound { get; }
 
     /// <summary>
-    /// Rainbow animation speed
+    /// Remove poops on round end
     /// </summary>
-    float RainbowAnimationSpeed { get; }
+    bool RemovePoopsOnRoundEnd { get; }
 
     /// <summary>
-    /// Database connection string
+    /// Poop lifetime in seconds (0 = permanent)
+    /// </summary>
+    int PoopLifetimeSeconds { get; }
+
+    // ===== COMMANDS SECTION =====
+    
+    /// <summary>
+    /// Number of records to show in leaderboards
+    /// </summary>
+    int TopRecordsLimit { get; }
+
+    /// <summary>
+    /// Command cooldown in seconds
+    /// </summary>
+    int CommandCooldownSeconds { get; }
+
+    // ===== DATABASE SECTION =====
+    
+    /// <summary>
+    /// Database connection string (overrides individual settings)
     /// </summary>
     string DatabaseConnection { get; }
 
@@ -117,31 +181,8 @@ internal interface IConfigManager : IManager
     /// </summary>
     string DatabasePassword { get; }
 
-    /// <summary>
-    /// Enable database auto-migration
-    /// </summary>
-    bool DatabaseAutoMigrate { get; }
-
-    /// <summary>
-    /// Sound effect volume
-    /// </summary>
-    float SoundVolume { get; }
-
-    /// <summary>
-    /// List of poop sound effect names
-    /// </summary>
-    string[] PoopSounds { get; }
-
-    /// <summary>
-    /// Enable sound effects
-    /// </summary>
-    bool EnableSounds { get; }
-
-    /// <summary>
-    /// Enable player color preferences
-    /// </summary>
-    bool EnableColorPreferences { get; }
-
+    // ===== UI SECTION =====
+    
     /// <summary>
     /// Chat prefix for poop messages
     /// </summary>
@@ -151,29 +192,4 @@ internal interface IConfigManager : IManager
     /// Enable debug logging
     /// </summary>
     bool DebugMode { get; }
-
-    /// <summary>
-    /// Maximum poops per round
-    /// </summary>
-    int MaxPoopsPerRound { get; }
-
-    /// <summary>
-    /// Remove poops on round end
-    /// </summary>
-    bool RemovePoopsOnRoundEnd { get; }
-
-    /// <summary>
-    /// Poop lifetime in seconds
-    /// </summary>
-    int PoopLifetimeSeconds { get; }
-
-    /// <summary>
-    /// Path to sound events file
-    /// </summary>
-    string SoundEventsFile { get; }
-
-    /// <summary>
-    /// Gets the default poop color as RGB tuple
-    /// </summary>
-    (int R, int G, int B) GetDefaultColorRgb();
 }
