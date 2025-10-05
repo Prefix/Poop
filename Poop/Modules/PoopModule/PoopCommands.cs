@@ -67,6 +67,24 @@ internal sealed class PoopCommands : IModule
         _cooldowns = new CommandCooldownTracker(_config.CommandCooldownSeconds);
     }
 
+    /// <summary>
+    /// Checks if a command should be allowed to execute by firing the shared interface event.
+    /// Returns true if the command should proceed, false if it was cancelled.
+    /// </summary>
+    private bool ShouldAllowCommand(IGamePlayer player, string commandName)
+    {
+        if (_sharedInterface is SharedInterface.SharedInterface sharedInterface)
+        {
+            if (!sharedInterface.FirePoopCommand(player, commandName))
+            {
+                // Command was cancelled by event handler
+                _logger.LogDebug("Command '{commandName}' was cancelled by event handler for player {player}", commandName, player.Name);
+                return false;
+            }
+        }
+        return true;
+    }
+
     public bool Init()
     {
         _logger.LogInformation("PoopCommands initialized");
@@ -114,6 +132,11 @@ internal sealed class PoopCommands : IModule
     private ECommandAction OnTopPoopersCommand(IGamePlayer player, StringCommand command)
     {
         _logger.LogInformation("{player} executed toppoopers command", player.Name);
+
+        if (!ShouldAllowCommand(player, "toppoopers"))
+        {
+            return ECommandAction.Handled;
+        }
 
         // Fire-and-forget pattern
         OnTopPoopersCommandAsync(player);
@@ -204,6 +227,11 @@ internal sealed class PoopCommands : IModule
     {
         _logger.LogInformation("{player} executed top victims command", player.Name);
 
+        if (!ShouldAllowCommand(player, "toppoop"))
+        {
+            return ECommandAction.Handled;
+        }
+
         // Fire-and-forget pattern
         OnTopVictimsCommandAsync(player);
         return ECommandAction.Handled;
@@ -291,6 +319,11 @@ internal sealed class PoopCommands : IModule
     {
         _logger.LogInformation("{player} executed poopcolor command", player.Name);
 
+        if (!ShouldAllowCommand(player, "poopcolor"))
+        {
+            return ECommandAction.Handled;
+        }
+
         OpenColorMenuForPlayer(player);
         return ECommandAction.Handled;
     }
@@ -318,14 +351,9 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private ECommandAction OnPoopCommand(IGamePlayer player, StringCommand command)
     {
-        // Fire OnPoopCommand event FIRST - allows blocking based on permissions/rules
-        if (_sharedInterface is SharedInterface.SharedInterface sharedInterface)
+        if (!ShouldAllowCommand(player, "poop"))
         {
-            if (!sharedInterface.FirePoopCommand(player, "poop"))
-            {
-                // Command was cancelled by event handler
-                return ECommandAction.Handled;
-            }
+            return ECommandAction.Handled;
         }
 
         SpawnPoopForPlayer(player);
