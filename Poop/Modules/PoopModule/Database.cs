@@ -163,7 +163,7 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                     updated_at = CURRENT_TIMESTAMP",
                 new
                 {
-                    SteamId = steamId,
+                    SteamId = steamId.ToString(),
                     Red = preference.Red,
                     Green = preference.Green,
                     Blue = preference.Blue,
@@ -203,7 +203,7 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                     is_random as IsRandom
                 FROM poop_colors 
                 WHERE steam_id = @SteamId",
-                new { SteamId = steamId });
+                new { SteamId = steamId.ToString() });
 
             return result;
         }
@@ -368,7 +368,7 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                 SELECT COUNT(*) 
                 FROM poop_logs 
                 WHERE target_steamid = @TargetSteamId",
-                new { TargetSteamId = targetSteamId });
+                new { TargetSteamId = targetSteamId.ToString() });
 
             return result;
         }
