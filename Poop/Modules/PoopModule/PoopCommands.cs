@@ -76,10 +76,6 @@ internal sealed class PoopCommands : IModule
 
     public bool Init()
     {
-        _logger.LogInformation("PoopCommands initialized");
-        _logger.LogInformation("Cooldown: {cooldown}s, Top Records: {records}, Max Distance: {distance}",
-            _config.CommandCooldownSeconds, _config.TopRecordsLimit, _config.MaxDeadPlayerDistance);
-
         // Initialize the chat prefix for extension methods
         Format.InitializeChatPrefix(_config.ChatPrefix);
         RegisterCommands();
@@ -90,21 +86,14 @@ internal sealed class PoopCommands : IModule
 
     private void RegisterCommands()
     {
-        _logger.LogInformation("Registering poop commands using CommandManager...");
-
-        int registeredCount = 0;
-
         // Register all command groups using helper method
-        registeredCount += RegisterCommandGroup(_config.PoopCommand, OnPoopCommand, "Poop spawn");
-        registeredCount += RegisterCommandGroup(_config.ColorCommand, OnPoopColorCommand, "Color menu");
-        registeredCount += RegisterCommandGroup(_config.TopPoopersCommand, OnTopPoopersCommand, "Top poopers");
-        registeredCount += RegisterCommandGroup(_config.TopVictimsCommand, OnTopVictimsCommand, "Top victims");
+        RegisterCommandGroup(_config.PoopCommand, OnPoopCommand, "Poop spawn");
+        RegisterCommandGroup(_config.ColorCommand, OnPoopColorCommand, "Color menu");
+        RegisterCommandGroup(_config.TopPoopersCommand, OnTopPoopersCommand, "Top poopers");
+        RegisterCommandGroup(_config.TopVictimsCommand, OnTopVictimsCommand, "Top victims");
 
         // Debug/admin commands (server console only)
         _commandManager.AddServerCommand("poop_dryrun", OnPoopDryrunCommand);
-        registeredCount++;
-
-        _logger.LogInformation("Registered {count} poop commands via CommandManager", registeredCount);
     }
 
     #region Command Handlers - Using CommandManager
@@ -115,8 +104,6 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private ECommandAction OnTopPoopersCommand(IGamePlayer player, StringCommand command)
     {
-        _logger.LogInformation("{player} executed toppoopers command", player.Name);
-
         if (!ShouldAllowCommand(player, "toppoopers"))
         {
             return ECommandAction.Handled;
@@ -187,8 +174,6 @@ internal sealed class PoopCommands : IModule
                             ["poopCount"] = record.PoopCount
                         }));
                     }
-
-                    _logger.LogDebug("Displayed top {count} poopers to {player}", topPoopers.Length, player.Name);
                 });
             }
             catch (Exception ex)
@@ -209,8 +194,6 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private ECommandAction OnTopVictimsCommand(IGamePlayer player, StringCommand command)
     {
-        _logger.LogInformation("{player} executed top victims command", player.Name);
-
         if (!ShouldAllowCommand(player, "toppoop"))
         {
             return ECommandAction.Handled;
@@ -301,8 +284,6 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private ECommandAction OnPoopColorCommand(IGamePlayer player, StringCommand command)
     {
-        _logger.LogInformation("{player} executed poopcolor command", player.Name);
-
         if (!ShouldAllowCommand(player, "poopcolor"))
         {
             return ECommandAction.Handled;
@@ -349,8 +330,6 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private void SpawnPoopForPlayer(IGamePlayer player)
     {
-        _logger.LogInformation("{player} executed poop command", player.Name);
-
         try
         {
             // 1. Get player controller and validate

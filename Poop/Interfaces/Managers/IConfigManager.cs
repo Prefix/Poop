@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Prefix.Poop.Models;
 using Prefix.Poop.Modules.PoopModule;
@@ -97,14 +96,24 @@ internal interface IConfigManager : IManager
     bool EnableSounds { get; }
 
     /// <summary>
-    /// Sound effect volume (0.0 to 1.0)
+    /// Sound effect volume (0.0 to 1.0) - global default
     /// </summary>
     float SoundVolume { get; }
 
     /// <summary>
-    /// List of poop sound effect names
+    /// List of poop sound configurations with optional volume overrides
     /// </summary>
-    string[] PoopSounds { get; }
+    SoundConfig[] PoopSoundsConfig { get; }
+
+    /// <summary>
+    /// Enable taunt sounds when a player is pooped on
+    /// </summary>
+    bool EnableTauntSounds { get; }
+
+    /// <summary>
+    /// List of taunt sound configurations with optional volume overrides
+    /// </summary>
+    SoundConfig[] TauntSoundsConfig { get; }
 
     // ===== VICTIM DETECTION SECTION =====
     
@@ -176,30 +185,6 @@ internal interface IConfigManager : IManager
     /// Top victims leaderboard command configuration
     /// </summary>
     CommandConfig TopVictimsCommand { get; }
-
-    /// <summary>
-    /// Command aliases for spawning poop (!poop, !shit) - DEPRECATED: Use PoopCommand.Aliases
-    /// </summary>
-    [Obsolete("Use PoopCommand.Aliases instead")]
-    string[] PoopCommands { get; }
-
-    /// <summary>
-    /// Command aliases for opening color menu (!poopcolor, !poop_color, !colorpoop) - DEPRECATED: Use ColorCommand.Aliases
-    /// </summary>
-    [Obsolete("Use ColorCommand.Aliases instead")]
-    string[] ColorCommands { get; }
-
-    /// <summary>
-    /// Command aliases for top poopers leaderboard (!toppoopers, !pooperstop) - DEPRECATED: Use TopPoopersCommand.Aliases
-    /// </summary>
-    [Obsolete("Use TopPoopersCommand.Aliases instead")]
-    string[] TopPoopersCommands { get; }
-
-    /// <summary>
-    /// Command aliases for top victims leaderboard (!toppoop, !pooptop) - DEPRECATED: Use TopVictimsCommand.Aliases
-    /// </summary>
-    [Obsolete("Use TopVictimsCommand.Aliases instead")]
-    string[] TopVictimsCommands { get; }
 
     // ===== DATABASE SECTION =====
     

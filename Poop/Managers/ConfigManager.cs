@@ -38,14 +38,6 @@ internal sealed class ConfigManager : IConfigManager
     public CommandConfig ColorCommand { get; }
     public CommandConfig TopPoopersCommand { get; }
     public CommandConfig TopVictimsCommand { get; }
-    [Obsolete("Use PoopCommand.Aliases instead")]
-    public string[] PoopCommands => PoopCommand.Aliases;
-    [Obsolete("Use ColorCommand.Aliases instead")]
-    public string[] ColorCommands => ColorCommand.Aliases;
-    [Obsolete("Use TopPoopersCommand.Aliases instead")]
-    public string[] TopPoopersCommands => TopPoopersCommand.Aliases;
-    [Obsolete("Use TopVictimsCommand.Aliases instead")]
-    public string[] TopVictimsCommands => TopVictimsCommand.Aliases;
     public float MaxDeadPlayerDistance { get; }
     public bool UseRagdollVictimDetection { get; }
     public float RagdollDetectionDistance { get; }
@@ -64,7 +56,9 @@ internal sealed class ConfigManager : IConfigManager
     // Sound Settings
     public bool EnableSounds { get; }
     public float SoundVolume { get; }
-    public string[] PoopSounds { get; }
+    public SoundConfig[] PoopSoundsConfig { get; }
+    public bool EnableTauntSounds { get; }
+    public SoundConfig[] TauntSoundsConfig { get; }
 
     // Database Settings
     public string DatabaseConnection { get; }
@@ -209,11 +203,21 @@ internal sealed class ConfigManager : IConfigManager
         var soundConfig = poopModule.GetSection("Sound");
         EnableSounds = soundConfig.GetValue("EnableSounds", true);
         SoundVolume = soundConfig.GetValue("SoundVolume", 0.5f);
-        PoopSounds = soundConfig.GetSection("PoopSounds").Get<string[]>() ??
+        
+        // Load poop sounds with volume overrides
+        PoopSoundsConfig = soundConfig.GetSection("PoopSounds").Get<SoundConfig[]>() ?? 
         [
-            "poop.poop_sound_01",
-            "poop.poop_sound_02",
-            "poop.poop_sound_03"
+            new SoundConfig { SoundEvent = "poop.poop_sound_01", Volume = null },
+            new SoundConfig { SoundEvent = "poop.poop_sound_02", Volume = null },
+            new SoundConfig { SoundEvent = "poop.poop_sound_03", Volume = null }
+        ];
+        
+        // Load taunt sounds with volume overrides
+        EnableTauntSounds = soundConfig.GetValue("EnableTauntSounds", true);
+        TauntSoundsConfig = soundConfig.GetSection("TauntSounds").Get<SoundConfig[]>() ?? 
+        [
+            new SoundConfig { SoundEvent = "poop.poop_taunt_01", Volume = null },
+            new SoundConfig { SoundEvent = "poop.poop_taunt_02", Volume = null }
         ];
 
         // Database configuration

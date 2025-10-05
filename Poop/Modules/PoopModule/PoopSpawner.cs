@@ -354,12 +354,32 @@ internal sealed class PoopSpawner(
             Success = true
         });
 
-        // Play sound
-        if (playSounds && config is { EnableSounds: true, PoopSounds.Length: > 0 })
+        // Play poop sound with volume override support
+        if (playSounds && config is { EnableSounds: true, PoopSoundsConfig.Length: > 0 })
         {
-            var soundIndex = _random.Next(config.PoopSounds.Length);
-            var soundEvent = config.PoopSounds[soundIndex];
-            bridge.SoundManager.StartSoundEvent(soundEvent, result.Entity, config.SoundVolume);
+            var soundIndex = _random.Next(config.PoopSoundsConfig.Length);
+            var soundConfig = config.PoopSoundsConfig[soundIndex];
+            var volume = soundConfig.Volume ?? config.SoundVolume; // Use override or global volume
+            RecipientFilter filter = new();
+            bridge.SoundManager.StartSoundEvent(soundConfig.SoundEvent, result.Entity, volume, filter);
+        }
+    
+        // Play taunt sound for victim (if victim is a real player and not a bot)
+        if (playSounds && victim != null && config is { EnableSounds: true, EnableTauntSounds: true, TauntSoundsConfig.Length: > 0 })
+        {
+            // Check if victim is a real player (not a bot)
+            if (!victim.IsFakeClient)
+            {
+                var victimController = playerManager.GetController(victim);
+                if (victimController != null)
+                {
+                    var tauntIndex = _random.Next(config.TauntSoundsConfig.Length);
+                    var tauntConfig = config.TauntSoundsConfig[tauntIndex];
+                    var tauntVolume = tauntConfig.Volume ?? config.SoundVolume; // Use override or global volume
+                    RecipientFilter filter = new(victimController.PlayerSlot);
+                    bridge.SoundManager.StartSoundEvent(tauntConfig.SoundEvent, victimController, tauntVolume, filter);
+                }
+            }
         }
 
         // Show messages
