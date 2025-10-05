@@ -46,7 +46,7 @@ internal sealed class SharedInterface(
         bridge.SharpModuleManager.RegisterDynamicNative(bridge.Poop, $"{IPoopShared.Identity}.SetPlayerColorPreferenceAsync", SetPlayerColorPreferenceAsync);
 
         // Register the shared interface itself for direct C# plugin access
-        bridge.SharpModuleManager.RegisterSharpModuleInterface(bridge.Poop, IPoopShared.Identity, this);
+        bridge.SharpModuleManager.RegisterSharpModuleInterface<IPoopShared>(bridge.Poop, IPoopShared.Identity, this);
 
         // Subscribe to internal poop spawn events from PoopSpawner
         spawner.PoopSpawnedInternal += OnPoopSpawnedInternal;
