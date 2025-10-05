@@ -244,11 +244,34 @@ internal sealed class RainbowPoopInfo
 }
 
 /// <summary>
-/// Command cooldown tracker
+/// Command cooldown tracker with per-command cooldown support
 /// </summary>
-internal sealed class CommandCooldownTracker(int cooldownSeconds = 3)
+internal sealed class CommandCooldownTracker
 {
     private readonly Dictionary<string, Dictionary<IGameClient, DateTime>> _cooldowns = new();
+    private readonly Dictionary<string, int> _commandCooldowns = new();
+    private readonly int _defaultCooldownSeconds;
+
+    public CommandCooldownTracker(int defaultCooldownSeconds = 3)
+    {
+        _defaultCooldownSeconds = defaultCooldownSeconds;
+    }
+
+    /// <summary>
+    /// Set a custom cooldown for a specific command
+    /// </summary>
+    public void SetCommandCooldown(string commandName, int cooldownSeconds)
+    {
+        _commandCooldowns[commandName] = cooldownSeconds;
+    }
+
+    /// <summary>
+    /// Get the cooldown duration for a specific command
+    /// </summary>
+    private int GetCommandCooldown(string commandName)
+    {
+        return _commandCooldowns.TryGetValue(commandName, out var cooldown) ? cooldown : _defaultCooldownSeconds;
+    }
 
     public bool CanExecute(string commandName, IGameClient player)
     {
@@ -258,6 +281,7 @@ internal sealed class CommandCooldownTracker(int cooldownSeconds = 3)
         }
 
         var commandCooldowns = _cooldowns[commandName];
+        var cooldownSeconds = GetCommandCooldown(commandName);
 
         if (commandCooldowns.TryGetValue(player, out var lastUse))
         {
@@ -297,6 +321,7 @@ internal sealed class CommandCooldownTracker(int cooldownSeconds = 3)
             return 0;
         }
 
+        var cooldownSeconds = GetCommandCooldown(commandName);
         var timeSinceLastUse = DateTime.UtcNow - lastUse;
         var remaining = cooldownSeconds - timeSinceLastUse.TotalSeconds;
 

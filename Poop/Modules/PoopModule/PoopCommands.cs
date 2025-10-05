@@ -7,6 +7,7 @@ using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Managers.Player;
 using Prefix.Poop.Interfaces.Modules.PoopModule;
 using Prefix.Poop.Interfaces.PoopModule;
+using Prefix.Poop.Models;
 using Prefix.Poop.Shared;
 using Prefix.Poop.Shared.Models;
 using Prefix.Poop.Utils;
@@ -65,24 +66,12 @@ internal sealed class PoopCommands : IModule
         _poopPlayerManager = poopPlayerManager;
         _sharedInterface = sharedInterface;
         _cooldowns = new CommandCooldownTracker(_config.CommandCooldownSeconds);
-    }
-
-    /// <summary>
-    /// Checks if a command should be allowed to execute by firing the shared interface event.
-    /// Returns true if the command should proceed, false if it was cancelled.
-    /// </summary>
-    private bool ShouldAllowCommand(IGamePlayer player, string commandName)
-    {
-        if (_sharedInterface is SharedInterface.SharedInterface sharedInterface)
-        {
-            if (!sharedInterface.FirePoopCommand(player, commandName))
-            {
-                // Command was cancelled by event handler
-                _logger.LogDebug("Command '{commandName}' was cancelled by event handler for player {player}", commandName, player.Name);
-                return false;
-            }
-        }
-        return true;
+        
+        // Set up per-command cooldowns
+        _cooldowns.SetCommandCooldown("poop", _config.PoopCommand.CooldownSeconds);
+        _cooldowns.SetCommandCooldown("poopcolor", _config.ColorCommand.CooldownSeconds);
+        _cooldowns.SetCommandCooldown("toppoopers", _config.TopPoopersCommand.CooldownSeconds);
+        _cooldowns.SetCommandCooldown("toppoop", _config.TopVictimsCommand.CooldownSeconds);
     }
 
     public bool Init()
@@ -98,29 +87,24 @@ internal sealed class PoopCommands : IModule
         return true;
     }
 
+
     private void RegisterCommands()
     {
         _logger.LogInformation("Registering poop commands using CommandManager...");
 
-        // Main poop commands
-        _commandManager.AddClientChatCommand("poop", OnPoopCommand);
-        _commandManager.AddClientChatCommand("shit", OnPoopCommand);
+        int registeredCount = 0;
 
-        // Color selection command
-        _commandManager.AddClientChatCommand("poopcolor", OnPoopColorCommand);
-        _commandManager.AddClientChatCommand("poop_color", OnPoopColorCommand);
-        _commandManager.AddClientChatCommand("colorpoop", OnPoopColorCommand);
-
-        // Top poopers/victims commands
-        _commandManager.AddClientChatCommand("toppoopers", OnTopPoopersCommand);
-        _commandManager.AddClientChatCommand("pooperstop", OnTopPoopersCommand);
-        _commandManager.AddClientChatCommand("toppoop", OnTopVictimsCommand);
-        _commandManager.AddClientChatCommand("pooptop", OnTopVictimsCommand);
+        // Register all command groups using helper method
+        registeredCount += RegisterCommandGroup(_config.PoopCommand, OnPoopCommand, "Poop spawn");
+        registeredCount += RegisterCommandGroup(_config.ColorCommand, OnPoopColorCommand, "Color menu");
+        registeredCount += RegisterCommandGroup(_config.TopPoopersCommand, OnTopPoopersCommand, "Top poopers");
+        registeredCount += RegisterCommandGroup(_config.TopVictimsCommand, OnTopVictimsCommand, "Top victims");
 
         // Debug/admin commands (server console only)
         _commandManager.AddServerCommand("poop_dryrun", OnPoopDryrunCommand);
+        registeredCount++;
 
-        _logger.LogInformation("Registered 11 poop commands via CommandManager");
+        _logger.LogInformation("Registered {count} poop commands via CommandManager", registeredCount);
     }
 
     #region Command Handlers - Using CommandManager
@@ -574,4 +558,46 @@ internal sealed class PoopCommands : IModule
     }
 
     #endregion
+    /// <summary>
+    /// Checks if a command should be allowed to execute by firing the shared interface event.
+    /// Returns true if the command should proceed, false if it was cancelled.
+    /// </summary>
+    private bool ShouldAllowCommand(IGamePlayer player, string commandName)
+    {
+        if (_sharedInterface is SharedInterface.SharedInterface sharedInterface)
+        {
+            if (!sharedInterface.FirePoopCommand(player, commandName))
+            {
+                // Command was cancelled by event handler
+                _logger.LogDebug("Command '{commandName}' was cancelled by event handler for player {player}", commandName, player.Name);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Helper method to register a group of command aliases
+    /// </summary>
+    private int RegisterCommandGroup(
+        CommandConfig config,
+        Func<IGamePlayer, StringCommand, ECommandAction> handler,
+        string commandGroupName)
+    {
+        if (!config.Enabled)
+        {
+            _logger.LogInformation("{commandGroup} commands are disabled in configuration", commandGroupName);
+            return 0;
+        }
+
+        foreach (var cmd in config.Aliases)
+        {
+            _commandManager.AddClientChatCommand(cmd, handler);
+        }
+
+        _logger.LogDebug("Registered {count} {commandGroup} command(s) with {cooldown}s cooldown",
+            config.Aliases.Length, commandGroupName, config.CooldownSeconds);
+
+        return config.Aliases.Length;
+    }
 }

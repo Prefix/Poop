@@ -34,6 +34,18 @@ internal sealed class ConfigManager : IConfigManager
     public float MassiveAnnouncementThreshold { get; }
     public int TopRecordsLimit { get; }
     public int CommandCooldownSeconds { get; }
+    public CommandConfig PoopCommand { get; }
+    public CommandConfig ColorCommand { get; }
+    public CommandConfig TopPoopersCommand { get; }
+    public CommandConfig TopVictimsCommand { get; }
+    [Obsolete("Use PoopCommand.Aliases instead")]
+    public string[] PoopCommands => PoopCommand.Aliases;
+    [Obsolete("Use ColorCommand.Aliases instead")]
+    public string[] ColorCommands => ColorCommand.Aliases;
+    [Obsolete("Use TopPoopersCommand.Aliases instead")]
+    public string[] TopPoopersCommands => TopPoopersCommand.Aliases;
+    [Obsolete("Use TopVictimsCommand.Aliases instead")]
+    public string[] TopVictimsCommands => TopVictimsCommand.Aliases;
     public float MaxDeadPlayerDistance { get; }
     public bool UseRagdollVictimDetection { get; }
     public float RagdollDetectionDistance { get; }
@@ -148,6 +160,35 @@ internal sealed class ConfigManager : IConfigManager
         var commands = poopModule.GetSection("Commands");
         TopRecordsLimit = commands.GetValue("TopRecordsLimit", 10);
         CommandCooldownSeconds = commands.GetValue("CommandCooldownSeconds", 3);
+        
+        // Load individual command configurations
+        PoopCommand = commands.GetSection("Poop").Get<CommandConfig>() ?? new CommandConfig
+        {
+            Enabled = true,
+            Aliases = ["poop", "shit"],
+            CooldownSeconds = 3
+        };
+        
+        ColorCommand = commands.GetSection("Color").Get<CommandConfig>() ?? new CommandConfig
+        {
+            Enabled = true,
+            Aliases = ["poopcolor", "poop_color", "colorpoop"],
+            CooldownSeconds = 2
+        };
+        
+        TopPoopersCommand = commands.GetSection("TopPoopers").Get<CommandConfig>() ?? new CommandConfig
+        {
+            Enabled = true,
+            Aliases = ["toppoopers", "pooperstop"],
+            CooldownSeconds = 5
+        };
+        
+        TopVictimsCommand = commands.GetSection("TopVictims").Get<CommandConfig>() ?? new CommandConfig
+        {
+            Enabled = true,
+            Aliases = ["toppoop", "pooptop"],
+            CooldownSeconds = 5
+        };
 
         // Color configuration
         var colorConfig = poopModule.GetSection("Color");

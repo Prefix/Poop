@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using Prefix.Poop.Models;
 using Prefix.Poop.Modules.PoopModule;
 using Prefix.Poop.Shared.Models;
 using Sharp.Shared.Units;
@@ -151,9 +153,53 @@ internal interface IConfigManager : IManager
     int TopRecordsLimit { get; }
 
     /// <summary>
-    /// Command cooldown in seconds
+    /// Command cooldown in seconds (legacy/default)
     /// </summary>
     int CommandCooldownSeconds { get; }
+
+    /// <summary>
+    /// Poop spawn command configuration
+    /// </summary>
+    CommandConfig PoopCommand { get; }
+
+    /// <summary>
+    /// Color menu command configuration
+    /// </summary>
+    CommandConfig ColorCommand { get; }
+
+    /// <summary>
+    /// Top poopers leaderboard command configuration
+    /// </summary>
+    CommandConfig TopPoopersCommand { get; }
+
+    /// <summary>
+    /// Top victims leaderboard command configuration
+    /// </summary>
+    CommandConfig TopVictimsCommand { get; }
+
+    /// <summary>
+    /// Command aliases for spawning poop (!poop, !shit) - DEPRECATED: Use PoopCommand.Aliases
+    /// </summary>
+    [Obsolete("Use PoopCommand.Aliases instead")]
+    string[] PoopCommands { get; }
+
+    /// <summary>
+    /// Command aliases for opening color menu (!poopcolor, !poop_color, !colorpoop) - DEPRECATED: Use ColorCommand.Aliases
+    /// </summary>
+    [Obsolete("Use ColorCommand.Aliases instead")]
+    string[] ColorCommands { get; }
+
+    /// <summary>
+    /// Command aliases for top poopers leaderboard (!toppoopers, !pooperstop) - DEPRECATED: Use TopPoopersCommand.Aliases
+    /// </summary>
+    [Obsolete("Use TopPoopersCommand.Aliases instead")]
+    string[] TopPoopersCommands { get; }
+
+    /// <summary>
+    /// Command aliases for top victims leaderboard (!toppoop, !pooptop) - DEPRECATED: Use TopVictimsCommand.Aliases
+    /// </summary>
+    [Obsolete("Use TopVictimsCommand.Aliases instead")]
+    string[] TopVictimsCommands { get; }
 
     // ===== DATABASE SECTION =====
     
