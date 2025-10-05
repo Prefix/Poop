@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 
 namespace Prefix.Poop.Managers.Menu;
 

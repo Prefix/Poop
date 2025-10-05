@@ -2,7 +2,7 @@ using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;
 using Sharp.Shared.Units;
 
-namespace Prefix.Poop.Interfaces.Modules.Player;
+namespace Prefix.Poop.Interfaces.Managers.Player;
 
 /// <summary>
 /// Wrapper for IGameClient that adds admin functionality and controller access

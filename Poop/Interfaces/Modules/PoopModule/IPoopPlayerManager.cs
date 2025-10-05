@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Prefix.Poop.Shared.Models;
 using Sharp.Shared.Units;
 

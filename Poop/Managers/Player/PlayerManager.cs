@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;

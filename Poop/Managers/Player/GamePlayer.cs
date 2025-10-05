@@ -1,5 +1,5 @@
 using System;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;
 using Sharp.Shared.Units;

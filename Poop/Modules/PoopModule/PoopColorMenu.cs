@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Extensions;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Managers.Menu;
 using Prefix.Poop.Shared.Models;

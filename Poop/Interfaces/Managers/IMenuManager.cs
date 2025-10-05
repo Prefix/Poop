@@ -1,5 +1,5 @@
 using Prefix.Poop.Interfaces;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Prefix.Poop.Managers.Menu;
 
 namespace Prefix.Poop.Interfaces.Managers;

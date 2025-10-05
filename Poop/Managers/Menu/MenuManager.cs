@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Sharp.Shared.Enums;
 
 namespace Prefix.Poop.Managers.Menu;

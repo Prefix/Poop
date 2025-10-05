@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.Managers;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Prefix.Poop.Interfaces.PoopModule;
 using Prefix.Poop.Shared.Models;
 using Sharp.Shared.Enums;

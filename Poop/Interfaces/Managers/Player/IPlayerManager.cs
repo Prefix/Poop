@@ -1,11 +1,10 @@
 using System.Collections.Generic;
-using Prefix.Poop.Interfaces;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
 using Sharp.Shared.Objects;
 using Sharp.Shared.Units;
 
-namespace Prefix.Poop.Interfaces.Modules.Player;
+namespace Prefix.Poop.Interfaces.Managers.Player;
 
 internal interface IPlayerManager : IManager
 {

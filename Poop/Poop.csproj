@@ -61,4 +61,8 @@
       <ProjectReference Include="..\Poop.Shared\Poop.Shared.csproj" Private="false" ExcludeAssets="runtime" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Interfaces\Modules\" />
+    </ItemGroup>
+
 </Project>

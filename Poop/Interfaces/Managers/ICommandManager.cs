@@ -1,6 +1,6 @@
 using System;
 using Prefix.Poop.Interfaces;
-using Prefix.Poop.Interfaces.Modules.Player;
+using Prefix.Poop.Interfaces.Managers.Player;
 using Sharp.Shared.Enums;
 using Sharp.Shared.Types;
 
