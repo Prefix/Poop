@@ -49,19 +49,11 @@ internal sealed class RagdollTracker : IRagdollTracker
     }
     public bool Init()
     {
-        _logger.LogInformation("RagdollTracker initialized - subscribed to EntityListenerManager and ClientListenerManager");
         return true;
-    }
-
-    public void OnAllSharpModulesLoaded()
-    {
-        _logger.LogDebug("RagdollTracker: All modules loaded");
     }
 
     public void Shutdown()
     {
-        _logger.LogInformation("RagdollTracker shutting down");
-
         // Unsubscribe from entity events
         _entityListenerManager.EntityCreated -= OnEntityCreated;
         _entityListenerManager.EntityDeleted -= OnEntityDeleted;
@@ -150,10 +142,9 @@ internal sealed class RagdollTracker : IRagdollTracker
             }
         }
 
-        if (clientToRemove != null && _ragdolls.Remove(clientToRemove))
+        if (clientToRemove != null)
         {
-            _logger.LogDebug("Removed ragdoll for client {name} (SteamID: {steamId}) from tracking", 
-                clientToRemove.Name, clientToRemove.SteamId.ToString());
+            _ragdolls.Remove(clientToRemove);
         }
     }
 
@@ -162,9 +153,7 @@ internal sealed class RagdollTracker : IRagdollTracker
     /// </summary>
     private void OnRoundStart(IGameEvent ev)
     {
-        var count = _ragdolls.Count;
         _ragdolls.Clear();
-        _logger.LogDebug("Round start: Cleared {count} ragdoll(s)", count);
     }
 
     /// <summary>
@@ -172,10 +161,6 @@ internal sealed class RagdollTracker : IRagdollTracker
     /// </summary>
     private void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
-        if (_ragdolls.Remove(client))
-        {
-            _logger.LogDebug("Removed ragdoll tracking for disconnected client: {name} (SteamID: {steamId}, Reason: {reason})",
-                client.Name, client.SteamId.ToString(), reason);
-        }
+        _ragdolls.Remove(client);
     }
 }

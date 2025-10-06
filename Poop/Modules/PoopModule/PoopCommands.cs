@@ -121,11 +121,7 @@ internal sealed class PoopCommands : IModule
     {
         // 1. Get player controller and validate (on main thread)
         var controller = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-        if (controller == null)
-        {
-            _logger.LogWarning("Could not find controller for player {player} (slot {slot})", player.Name, player.Slot);
-            return;
-        }
+        if (controller == null) return;
 
         // 2. Check cooldown (on main thread)
 
@@ -211,11 +207,7 @@ internal sealed class PoopCommands : IModule
     {
         // 1. Get player controller and validate (on main thread)
         var controller = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-        if (controller == null)
-        {
-            _logger.LogWarning("Could not find controller for player {player} (slot {slot})", player.Name, player.Slot);
-            return;
-        }
+        if (controller == null) return;
 
         if (!_cooldowns.CanExecute("toppoop", player.Client))
         {
@@ -262,8 +254,6 @@ internal sealed class PoopCommands : IModule
                             ["poopCount"] = record.VictimCount
                         }));
                     }
-
-                    _logger.LogDebug("Displayed top {count} victims to {player}", topVictims.Length, player.Name);
                 });
             }
             catch (Exception ex)
@@ -334,11 +324,7 @@ internal sealed class PoopCommands : IModule
         {
             // 1. Get player controller and validate
             var controller = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-            if (controller == null)
-            {
-                _logger.LogWarning("Could not find controller for player {player} (slot {slot})", player.Name, player.Slot);
-                return;
-            }
+            if (controller == null) return;
 
             var pawn = controller.GetPlayerPawn();
             if (pawn == null || !pawn.IsValid())

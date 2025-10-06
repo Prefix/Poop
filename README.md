@@ -28,12 +28,12 @@ Please check PoopExample folder
 
 ## 📋 Commands
 
-| Command | Aliases | Description | Admin |
-|---------|---------|-------------|-------|
-| `/poop` | `/shit` | Spawn a poop on nearby dead player or at your position | No |
-| `/poopcolor` | `/poop_color`, `/colorpoop` | Open color selection menu | No |
-| `/toppoopers` | `/pooperstop` | Show top 10 players who placed the most poops | No |
-| `/toppoop` | `/pooptop` | Show top 10 players who were pooped on the most | No |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/poop` | `/shit` | Spawn a poop on nearby dead player or at your position |
+| `/poopcolor` | `/poop_color`, `/colorpoop` | Open color selection menu |
+| `/toppoopers` | `/pooperstop` | Show top 10 players who placed the most poops |
+| `/toppoop` | `/pooptop` | Show top 10 players who were pooped on the most |
 
 ## ⚙️ Configuration
 

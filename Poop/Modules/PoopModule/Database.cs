@@ -48,18 +48,11 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
 
         try
         {
-            _logger.LogInformation("Initializing MySQL database connection to {host}:{port}/{database}",
-                _config.DatabaseHost, _config.DatabasePort, _config.DatabaseName);
-
             // Initialize connection for setup
             _initConnection = new MySqlConnection(_connectionString);
             _initConnection.Open();
 
-            _logger.LogInformation("Database connection established successfully");
-
-            _logger.LogInformation("Running database migrations...");
             InitializeDatabase();
-            _logger.LogInformation("Database migrations completed");
         }
         catch (Exception ex)
         {
@@ -91,8 +84,6 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
-            _logger.LogInformation("Table 'poop_colors' created or verified");
-
             // Create poop_logs table for detailed poop event logging
             _initConnection.Execute(@"
                 CREATE TABLE IF NOT EXISTS poop_logs (
@@ -117,8 +108,6 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
                     INDEX idx_timestamp (timestamp DESC)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-
-            _logger.LogInformation("Table 'poop_logs' created or verified");
         }
         catch (Exception ex)
         {
@@ -471,8 +460,6 @@ internal sealed class PoopDatabase : IPoopDatabase, IDisposable
         }
 
         _semaphore.Dispose();
-
-        _logger.LogInformation("Database connections disposed");
     }
 
     public bool Init()

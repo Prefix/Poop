@@ -67,11 +67,6 @@ public sealed class Poop : IModSharpModule
 
     public bool Init()
     {
-        _logger.LogInformation(
-            "Oh wow, we seem to be crossing paths a lot lately... Where could I have seen you before? Can you figure it out?");
-
-        _logger.LogInformation("📦 Starting initialization of all services...");
-
         var init = 0;
 
         var managers = CallInit<IManager>();
@@ -93,39 +88,23 @@ public sealed class Poop : IModSharpModule
 
     public void PostInit()
     {
-        _logger.LogInformation("Why don't you stay and play for a while?");
-
         CallPostInit<IManager>();
         CallPostInit<IModule>();
     }
 
     public void Shutdown()
     {
-        _logger.LogInformation("See you around, Nameless~ Try to stay out of trouble, especially... the next time we meet!");
-
         CallShutdown<IModule>();
         CallShutdown<IManager>();
 
         // You must unregister your game data when your module is unloaded.
-        _bridge.GameData.Unregister("Poop.games");
+        //_bridge.GameData.Unregister("Poop.games");
     }
 
     public void OnAllModulesLoaded()
     {
-        _logger.LogInformation("A foolish sage or a wise fool... Who will I become next?");
-
         CallOnAllSharpModulesLoaded<IManager>();
         CallOnAllSharpModulesLoaded<IModule>();
-    }
-
-    public void OnLibraryConnected(string name)
-    {
-        _logger.LogInformation("The~ Game~ Is~ On~");
-    }
-
-    public void OnLibraryDisconnect(string name)
-    {
-        _logger.LogInformation("Done playing for today...");
     }
 
     private static void ConfigureServices(IServiceCollection services)

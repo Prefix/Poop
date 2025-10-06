@@ -35,8 +35,6 @@ internal sealed class LocaleManager : ILocaleManager
 
         // Initialize dictionary
         _localizedStrings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        _logger.LogInformation("LocaleManager initializing with locale: {locale}", CurrentLocale);
     }
 
     public bool Init()
@@ -56,7 +54,6 @@ internal sealed class LocaleManager : ILocaleManager
             // Load locale file
             LoadLocale(CurrentLocale);
 
-            _logger.LogInformation("LocaleManager initialized successfully with {count} strings", _localizedStrings.Count);
             return true;
         }
         catch (Exception ex)

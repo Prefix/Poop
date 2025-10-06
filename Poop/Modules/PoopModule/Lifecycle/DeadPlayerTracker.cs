@@ -40,19 +40,11 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker
 
     public bool Init()
     {
-        _logger.LogInformation("DeadPlayerTracker initialized");
         return true;
-    }
-
-    public void OnAllSharpModulesLoaded()
-    {
-        _logger.LogDebug("DeadPlayerTracker: All modules loaded");
     }
 
     public void Shutdown()
     {
-        _logger.LogInformation("DeadPlayerTracker shutting down");
-        
         // Unsubscribe from client events
         _clientListenerManager.ClientDisconnected -= OnClientDisconnected;
         
@@ -72,7 +64,6 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker
         var victim = e.VictimController;
         if (victim == null || !victim.IsValid())
         {
-            _logger.LogDebug("Player death event: victim controller is null or invalid");
             return;
         }
 
@@ -86,13 +77,9 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker
                 IGameClient? gameClient = victim.GetGameClient();
                 if (gameClient == null)
                 {
-                    _logger.LogDebug("Player death event: could not find game client for slot {slot}", victim.PlayerSlot);
                     return;
                 }
                 _deadPlayers[gameClient] = new DeadPlayerInfo(vec, gameClient);
-
-                _logger.LogDebug("Tracked dead player: {name} (slot {slot}, SteamID: {steamId}) at ({x:F2}, {y:F2}, {z:F2})",
-                    victim.PlayerName, victim.PlayerSlot, gameClient.SteamId.ToString(), vec.X, vec.Y, vec.Z);
             }
         }
         catch (Exception ex)
@@ -106,9 +93,7 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker
     /// </summary>
     private void OnRoundStart(IGameEvent ev)
     {
-        var count = _deadPlayers.Count;
         _deadPlayers.Clear();
-        _logger.LogDebug("Round start: Cleared {count} dead player(s)", count);
     }
 
     /// <summary>
@@ -116,10 +101,6 @@ internal sealed class DeadPlayerTracker : IDeadPlayerTracker
     /// </summary>
     private void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
-        if (_deadPlayers.Remove(client))
-        {
-            _logger.LogDebug("Removed dead player tracking for disconnected client: {name} (SteamID: {steamId}, Reason: {reason})",
-                client.Name, client.SteamId.ToString(), reason);
-        }
+        _deadPlayers.Remove(client);
     }
 }

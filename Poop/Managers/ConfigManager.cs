@@ -235,8 +235,6 @@ internal sealed class ConfigManager : IConfigManager
         DebugMode = uiConfig.GetValue("DebugMode", false);
 
         Validate();
-
-        _logger.LogInformation("ConfigManager initialized with {adminCount} admins", _adminSteamIds.Count);
     }
 
     /// <summary>

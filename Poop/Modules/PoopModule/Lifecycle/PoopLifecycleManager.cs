@@ -42,20 +42,11 @@ internal sealed class PoopLifecycleManager : IPoopLifecycleManager
 
     public bool Init()
     {
-        _logger.LogInformation("PoopLifecycleManager initialized");
-        _logger.LogInformation("Poop Lifetime: {lifetime}s, Max Per Round: {max}, Remove on Round End: {remove}",
-            _config.PoopLifetimeSeconds, _config.MaxPoopsPerRound, _config.RemovePoopsOnRoundEnd);
         return true;
-    }
-
-    public void OnAllSharpModulesLoaded()
-    {
-        _logger.LogDebug("PoopLifecycleManager: All modules loaded");
     }
 
     public void Shutdown()
     {
-        _logger.LogInformation("PoopLifecycleManager shutting down - cleaning up {count} poops", _poopTimers.Count);
         RemoveAllPoops();
     }
 
@@ -84,15 +75,11 @@ internal sealed class PoopLifecycleManager : IPoopLifecycleManager
 
             _poopTimers[entity] = timerId;
 
-            _logger.LogDebug("Tracking poop entity - will auto-remove in {lifetime}s (Total tracked: {count})",
-                _config.PoopLifetimeSeconds, _poopTimers.Count);
         }
         else
         {
             // Track without timer (lives forever, but track for cleanup on round end)
             _poopTimers[entity] = Guid.Empty;
-
-            _logger.LogDebug("Tracking poop entity (no lifetime limit) - Total tracked: {count}", _poopTimers.Count);
         }
     }
 
@@ -134,7 +121,6 @@ internal sealed class PoopLifecycleManager : IPoopLifecycleManager
         }
 
         _poopTimers.Clear();
-        _logger.LogInformation("Removed all {count} tracked poops", count);
     }
 
     /// <summary>
@@ -177,7 +163,6 @@ internal sealed class PoopLifecycleManager : IPoopLifecycleManager
             try
             {
                 entity.Kill();
-                _logger.LogDebug("Removed poop entity (lifetime expired or manual removal)");
             }
             catch (Exception ex)
             {
@@ -194,7 +179,6 @@ internal sealed class PoopLifecycleManager : IPoopLifecycleManager
     /// </summary>
     private void OnRoundStart(IGameEvent ev)
     {
-        _logger.LogDebug("Round start - resetting poop counter (was {count})", _poopsThisRound);
         _poopsThisRound = 0;
     }
 
@@ -205,12 +189,7 @@ internal sealed class PoopLifecycleManager : IPoopLifecycleManager
     {
         if (_config.RemovePoopsOnRoundEnd)
         {
-            _logger.LogInformation("Round end - removing all {count} poops (RemovePoopsOnRoundEnd enabled)", _poopTimers.Count);
             RemoveAllPoops();
-        }
-        else
-        {
-            _logger.LogDebug("Round end - keeping {count} poops (RemovePoopsOnRoundEnd disabled)", _poopTimers.Count);
         }
     }
 }

@@ -32,7 +32,6 @@ internal sealed class PoopPrecache : IModule
 
     public bool Init()
     {
-        _logger.LogInformation("PoopPrecache initialized");
         return true;
     }
 
@@ -41,7 +40,6 @@ internal sealed class PoopPrecache : IModule
     /// </summary>
     private void OnResourcePrecache()
     {
-        _logger.LogInformation("Precaching poop resources...");
 
         try
         {
@@ -49,25 +47,13 @@ internal sealed class PoopPrecache : IModule
             if (!string.IsNullOrEmpty(_config.PoopModel))
             {
                 _bridge.ModSharp.PrecacheResource(_config.PoopModel);
-                _logger.LogInformation("Precached model: {model}", _config.PoopModel);
-            }
-            else
-            {
-                _logger.LogWarning("PoopModel is not configured");
             }
 
             // Precache sound events file
             if (_config.EnableSounds && !string.IsNullOrEmpty(_config.SoundEventsFile))
             {
                 _bridge.ModSharp.PrecacheResource(_config.SoundEventsFile);
-                _logger.LogInformation("Precached sound events: {soundEvents}", _config.SoundEventsFile);
             }
-            else if (_config.EnableSounds)
-            {
-                _logger.LogWarning("Sounds are enabled but SoundEventsFile is not configured");
-            }
-
-            _logger.LogInformation("Poop resource precaching completed successfully");
         }
         catch (Exception ex)
         {

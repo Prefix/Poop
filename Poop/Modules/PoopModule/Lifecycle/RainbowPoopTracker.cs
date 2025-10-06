@@ -53,18 +53,11 @@ internal sealed class RainbowPoopTracker : IRainbowPoopTracker
 
     public bool Init()
     {
-        _logger.LogInformation("RainbowPoopTracker initialized - Update interval: {interval}s", UpdateInterval);
         return true;
-    }
-
-    public void OnAllSharpModulesLoaded()
-    {
-        _logger.LogDebug("RainbowPoopTracker: All modules loaded");
     }
 
     public void Shutdown()
     {
-        _logger.LogInformation("RainbowPoopTracker shutting down - {count} rainbow poops tracked", _rainbowPoops.Count);
         StopRainbowTimer();
         _rainbowPoops.Clear();
         _currentHue = 0.0f; // Reset hue on shutdown
@@ -75,7 +68,6 @@ internal sealed class RainbowPoopTracker : IRainbowPoopTracker
     /// </summary>
     private void OnRoundEnd(IGameEvent ev)
     {
-        _logger.LogDebug("Round end - clearing {count} rainbow poops", _rainbowPoops.Count);
         ClearAll();
     }
 
@@ -87,17 +79,14 @@ internal sealed class RainbowPoopTracker : IRainbowPoopTracker
         // Check if rainbow poops are enabled
         if (!_config.EnableRainbowPoops)
         {
-            _logger.LogDebug("Rainbow poops are disabled, not tracking");
             return;
         }
 
-        if (entity == null || !entity.IsValid())
+        if (!entity.IsValid())
         {
-            _logger.LogWarning("Attempted to track invalid rainbow poop entity");
             return;
         }
 
-        _logger.LogDebug("Tracking new rainbow poop entity (Handle: {handle})", entity.Handle);
         _rainbowPoops[entity] = DateTime.UtcNow;
 
         // Start the update timer if not already running
@@ -111,8 +100,6 @@ internal sealed class RainbowPoopTracker : IRainbowPoopTracker
     {
         if (_rainbowPoops.Remove(entity))
         {
-            _logger.LogDebug("Stopped tracking rainbow poop entity (Handle: {handle})", entity.Handle);
-
             // Stop timer if no more rainbow poops
             if (_rainbowPoops.Count == 0)
             {
@@ -126,7 +113,6 @@ internal sealed class RainbowPoopTracker : IRainbowPoopTracker
     /// </summary>
     public void ClearAll()
     {
-        _logger.LogDebug("Clearing all {count} rainbow poops", _rainbowPoops.Count);
         _rainbowPoops.Clear();
         _currentHue = 0.0f; // Reset hue
         StopRainbowTimer();
@@ -148,7 +134,6 @@ internal sealed class RainbowPoopTracker : IRainbowPoopTracker
             return;
         }
 
-        _logger.LogInformation("Starting rainbow color update timer");
         _rainbowTimerHandle = _bridge.ModSharp.PushTimer(() =>
         {
             UpdateRainbowColors();
@@ -163,7 +148,6 @@ internal sealed class RainbowPoopTracker : IRainbowPoopTracker
     {
         if (_rainbowTimerHandle.HasValue)
         {
-            _logger.LogInformation("Stopping rainbow color update timer");
             _bridge.ModSharp.StopTimer(_rainbowTimerHandle.Value);
             _rainbowTimerHandle = null;
         }
