@@ -52,16 +52,23 @@ internal sealed class PoopSpawner(
     /// <returns>Spawn result with entity, size, position, and victim info</returns>
     public SpawnPoopResult SpawnPoop(Vector position, float size = -1.0f, PoopColorPreference? color = null)
     {
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var sectionStopwatch = new System.Diagnostics.Stopwatch();
+        
         try
         {
             // Create the physics prop entity as IBaseModelEntity so we can set RenderColor for rainbow mode
+            sectionStopwatch.Start();
             var entity = bridge.EntityManager.CreateEntityByName<IBaseModelEntity>("prop_physics");
             if (entity == null)
             {
+                logger.LogInformation("SpawnPoop: CreateEntityByName failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return new SpawnPoopResult { Entity = null, Size = 0, Position = position };
             }
+            logger.LogInformation("SpawnPoop: CreateEntityByName took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
             
             // Configure spawn flags
+            sectionStopwatch.Restart();
             entity.SpawnFlags = (uint)(
                 SpawnFlags.PhysPropDebris |       // Don't collide with players
                 SpawnFlags.PhysPropTouch |        // Can be crashed through
@@ -74,8 +81,10 @@ internal sealed class PoopSpawner(
 
             // Get color for spawn
             var poopColor = GetPoopColor(color);
+            logger.LogInformation("SpawnPoop: Property setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // Spawn the entity with all properties set via key values
+            sectionStopwatch.Restart();
             entity.DispatchSpawn(
                 new Dictionary<string, KeyValuesVariantValueItem>
                 {
@@ -88,12 +97,16 @@ internal sealed class PoopSpawner(
                     {"rendercolor", $"{poopColor.Red} {poopColor.Green} {poopColor.Blue}"}
                 }
             );
+            logger.LogInformation("SpawnPoop: DispatchSpawn took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
             
             // Configure collision
+            sectionStopwatch.Restart();
             entity.SetCollisionGroup(CollisionGroupType.InteractiveDebris);
             entity.CollisionRulesChanged();
+            logger.LogInformation("SpawnPoop: Collision setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // Track poop for lifecycle management (lifetime, cleanup, etc.)
+            sectionStopwatch.Restart();
             lifecycleManager.TrackPoop(entity);
 
             // Track rainbow poops for color cycling
@@ -101,6 +114,10 @@ internal sealed class PoopSpawner(
             {
                 rainbowTracker.TrackRainbowPoop(entity);
             }
+            logger.LogInformation("SpawnPoop: Tracking setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
+
+            totalStopwatch.Stop();
+            logger.LogInformation("SpawnPoop: Total entity creation time: {elapsed}ms", totalStopwatch.ElapsedMilliseconds);
 
             return new SpawnPoopResult
             {
@@ -111,7 +128,8 @@ internal sealed class PoopSpawner(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error spawning poop entity");
+            totalStopwatch.Stop();
+            logger.LogError(ex, "Error spawning poop entity after {elapsed}ms", totalStopwatch.ElapsedMilliseconds);
             return new SpawnPoopResult { Entity = null, Size = 0, Position = position };
         }
     }
