@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Prefix.Poop.Interfaces;
 using Prefix.Poop.Interfaces.Managers;
 using Prefix.Poop.Interfaces.Managers.Player;
@@ -15,7 +14,6 @@ using Prefix.Poop.Extensions;
 using Microsoft.Extensions.Logging;
 using Prefix.Poop.Interfaces.PoopModule.Lifecycle;
 using Sharp.Shared.Enums;
-using Sharp.Shared.Objects;
 using Sharp.Shared.Types;
 
 namespace Prefix.Poop.Modules.PoopModule;
@@ -136,50 +134,42 @@ internal sealed class PoopCommands : IModule
         }
 
         // 3. Run database query on background thread
-        Task.Run(async () =>
+        _ = _bridge.ModSharp.InvokeFrameActionAsync(async () => 
         {
             try
             {
                 var topPoopers = await _database.GetTopPoopersAsync(_config.TopRecordsLimit);
 
-                // 4. Marshal results back to main thread for display
-                await _bridge.ModSharp.InvokeFrameActionAsync(() =>
+                var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
+                if (ctrl == null) return;
+
+                if (topPoopers.Length == 0)
                 {
-                    // Re-get controller in case player disconnected
-                    var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-                    if (ctrl == null) return;
+                    ctrl.PrintToChat(_locale.GetString("leaderboard.no_poopers"));
+                    return;
+                }
 
-                    if (topPoopers.Length == 0)
+                ctrl.PrintToChat(_locale.GetString("leaderboard.top_poopers_title", new Dictionary<string, object>
+                {
+                    ["count"] = topPoopers.Length
+                }));
+                
+                for (int i = 0; i < topPoopers.Length; i++)
+                {
+                    var record = topPoopers[i];
+                    ctrl.PrintToChat(_locale.GetString("leaderboard.top_poopers_entry", new Dictionary<string, object>
                     {
-                        ctrl.PrintToChat(_locale.GetString("leaderboard.no_poopers"));
-                        return;
-                    }
-
-                    ctrl.PrintToChat(_locale.GetString("leaderboard.top_poopers_title", new Dictionary<string, object>
-                    {
-                        ["count"] = topPoopers.Length
+                        ["rank"] = i + 1,
+                        ["playerName"] = record.Name,
+                        ["poopCount"] = record.PoopCount
                     }));
-                    
-                    for (int i = 0; i < topPoopers.Length; i++)
-                    {
-                        var record = topPoopers[i];
-                        ctrl.PrintToChat(_locale.GetString("leaderboard.top_poopers_entry", new Dictionary<string, object>
-                        {
-                            ["rank"] = i + 1,
-                            ["playerName"] = record.Name,
-                            ["poopCount"] = record.PoopCount
-                        }));
-                    }
-                });
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error executing toppoopers command for {player}", player.Name);
-                await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                {
-                    var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-                    ctrl?.PrintToChat(_locale.GetString("leaderboard.error_poopers"));
-                });
+                var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
+                ctrl?.PrintToChat(_locale.GetString("leaderboard.error_poopers"));
             }
         });
     }
@@ -220,50 +210,42 @@ internal sealed class PoopCommands : IModule
         }
 
         // 3. Run database query on background thread
-        Task.Run(async () =>
+        _bridge.ModSharp.InvokeFrameActionAsync(async () =>
         {
             try
             {
                 var topVictims = await _database.GetTopVictimsAsync(_config.TopRecordsLimit);
 
-                // 4. Marshal results back to main thread for display
-                await _bridge.ModSharp.InvokeFrameActionAsync(() =>
+                var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
+                if (ctrl == null) return;
+
+                if (topVictims.Length == 0)
                 {
-                    // Re-get controller in case player disconnected
-                    var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-                    if (ctrl == null) return;
+                    ctrl.PrintToChat(_locale.GetString("leaderboard.no_victims"));
+                    return;
+                }
 
-                    if (topVictims.Length == 0)
+                ctrl.PrintToChat(_locale.GetString("leaderboard.top_victims_title", new Dictionary<string, object>
+                {
+                    ["count"] = topVictims.Length
+                }));
+                
+                for (int i = 0; i < topVictims.Length; i++)
+                {
+                    var record = topVictims[i];
+                    ctrl.PrintToChat(_locale.GetString("leaderboard.top_victims_entry", new Dictionary<string, object>
                     {
-                        ctrl.PrintToChat(_locale.GetString("leaderboard.no_victims"));
-                        return;
-                    }
-
-                    ctrl.PrintToChat(_locale.GetString("leaderboard.top_victims_title", new Dictionary<string, object>
-                    {
-                        ["count"] = topVictims.Length
+                        ["rank"] = i + 1,
+                        ["playerName"] = record.Name,
+                        ["poopCount"] = record.VictimCount
                     }));
-                    
-                    for (int i = 0; i < topVictims.Length; i++)
-                    {
-                        var record = topVictims[i];
-                        ctrl.PrintToChat(_locale.GetString("leaderboard.top_victims_entry", new Dictionary<string, object>
-                        {
-                            ["rank"] = i + 1,
-                            ["playerName"] = record.Name,
-                            ["poopCount"] = record.VictimCount
-                        }));
-                    }
-                });
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error executing top victims command for {player}", player.Name);
-                await _bridge.ModSharp.InvokeFrameActionAsync(() =>
-                {
-                    var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-                    ctrl?.PrintToChat(_locale.GetString("leaderboard.error_victims"));
-                });
+                var ctrl = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
+                ctrl?.PrintToChat(_locale.GetString("leaderboard.error_victims"));
             }
         });
     }
@@ -320,19 +302,31 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private void SpawnPoopForPlayer(IGamePlayer player)
     {
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var sectionStopwatch = new System.Diagnostics.Stopwatch();
+        
         try
         {
             // 1. Get player controller and validate
+            sectionStopwatch.Restart();
             var controller = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-            if (controller == null) return;
+            if (controller == null) 
+            {
+                _logger.LogInformation("SpawnPoopForPlayer: Controller validation failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
+                return;
+            }
 
             var pawn = controller.GetPlayerPawn();
             if (pawn == null || !pawn.IsValid())
             {
                 controller.PrintToChat(_locale.GetString("poop.must_be_alive"));
+                _logger.LogInformation("SpawnPoopForPlayer: Pawn validation failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
+            _logger.LogInformation("SpawnPoopForPlayer: Player validation took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
+            // 2. Check cooldown
+            sectionStopwatch.Restart();
             if (!_cooldowns.CanExecute("poop", player.Client))
             {
                 var remaining = _cooldowns.GetRemainingCooldown("poop", player.Client);
@@ -340,61 +334,67 @@ internal sealed class PoopCommands : IModule
                 {
                     ["remaining"] = remaining
                 }));
+                _logger.LogInformation("SpawnPoopForPlayer: Cooldown check failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
+            _logger.LogInformation("SpawnPoopForPlayer: Cooldown check took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // 3. Check max poops per round limit
+            sectionStopwatch.Restart();
             if (_lifecycleManager.HasReachedMaxPoopsPerRound())
             {
                 controller.PrintToChat(_locale.GetString("poop.max_per_round"));
+                _logger.LogInformation("SpawnPoopForPlayer: Max poops check failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
+            _logger.LogInformation("SpawnPoopForPlayer: Max poops check took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // 4. Check if player is on the ground
+            sectionStopwatch.Restart();
             if (!pawn.Flags.HasFlag(EntityFlags.OnGround))
             {
                 controller.PrintToChat(_locale.GetString("poop.must_be_on_ground"));
+                _logger.LogInformation("SpawnPoopForPlayer: Ground check failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
+            _logger.LogInformation("SpawnPoopForPlayer: Ground check took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
-            // 5. Get player position
-            var position = pawn.GetAbsOrigin();
-
-            // 6. Find nearest dead player (victim can be null)
-            var victim = _spawner.FindNearestDeadPlayer(player.Client)?.Player;
-
-            // 7. Get player's color preference from PoopPlayerManager (handles cache)
-            // Check if color preferences are enabled
+            // 5. Get player's color preference from PoopPlayerManager (handles cache)
+            sectionStopwatch.Restart();
+            PoopColorPreference colorPref;
+            
             if (_config.EnableColorPreferences)
             {
                 // Get color preference from cache (preloaded on connect)
-                var colorPref = _poopPlayerManager.GetColorPreference(player.Client.SteamId);
+                colorPref = _poopPlayerManager.GetColorPreference(player.Client.SteamId);
 
                 // If random mode, get a random color each time
                 if (colorPref.IsRandom)
                 {
                     colorPref = ColorUtils.GetRandomColor(_config.AvailableColors);
                 }
-
-                _spawner.SpawnPoopWithFullLogic(
-                    player.Client,
-                    size: -1.0f,
-                    colorPref,
-                    playSounds: true,
-                    showMessages: true);
             }
             else
             {
                 // Use default color when preferences are disabled
                 var (r, g, b) = _config.GetDefaultColorRgb();
-                var colorPref = new PoopColorPreference(r, g, b);
-                _spawner.SpawnPoopWithFullLogic(
-                    player.Client,
-                    size: -1.0f,
-                    colorPref,
-                    playSounds: true,
-                    showMessages: true);
+                colorPref = new PoopColorPreference(r, g, b);
             }
+            _logger.LogInformation("SpawnPoopForPlayer: Color preference resolution took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
+
+            // 6. Spawn poop with gathered parameters
+            sectionStopwatch.Restart();
+            _spawner.SpawnPoopWithFullLogic(
+                player.Client,
+                size: -1.0f,
+                colorPref,
+                playSounds: true,
+                showMessages: true);
+            _logger.LogInformation("SpawnPoopForPlayer: SpawnPoopWithFullLogic took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
+            
+            totalStopwatch.Stop();
+            _logger.LogInformation("SpawnPoopForPlayer: Total execution time for {player}: {elapsed}ms", 
+                player.Name, totalStopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {

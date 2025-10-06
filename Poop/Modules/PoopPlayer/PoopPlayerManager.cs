@@ -202,14 +202,8 @@ internal sealed class PoopPlayerManager(
             return;
         }
 
-        if (!ulong.TryParse(client.SteamId.ToString(), out var steamId))
-        {
-            logger.LogWarning("Invalid SteamID for client: {steamId}", client.SteamId);
-            return;
-        }
-
         // Preload color preference asynchronously
-        _ = PreloadColorPreferenceAsync(client.Name, steamId);
+        _ = PreloadColorPreferenceAsync(client.Name, client.SteamId);
     }
 
     /// <summary>
