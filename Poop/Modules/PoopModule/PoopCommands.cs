@@ -302,31 +302,20 @@ internal sealed class PoopCommands : IModule
     /// </summary>
     private void SpawnPoopForPlayer(IGamePlayer player)
     {
-        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var sectionStopwatch = new System.Diagnostics.Stopwatch();
-        
         try
         {
             // 1. Get player controller and validate
-            sectionStopwatch.Restart();
             var controller = _bridge.EntityManager.FindPlayerControllerBySlot(player.Client.Slot);
-            if (controller == null) 
-            {
-                _logger.LogInformation("SpawnPoopForPlayer: Controller validation failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
-                return;
-            }
+            if (controller == null) return;
 
             var pawn = controller.GetPlayerPawn();
             if (pawn == null || !pawn.IsValid())
             {
                 controller.PrintToChat(_locale.GetString("poop.must_be_alive"));
-                _logger.LogInformation("SpawnPoopForPlayer: Pawn validation failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
-            _logger.LogInformation("SpawnPoopForPlayer: Player validation took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // 2. Check cooldown
-            sectionStopwatch.Restart();
             if (!_cooldowns.CanExecute("poop", player.Client))
             {
                 var remaining = _cooldowns.GetRemainingCooldown("poop", player.Client);
@@ -334,33 +323,24 @@ internal sealed class PoopCommands : IModule
                 {
                     ["remaining"] = remaining
                 }));
-                _logger.LogInformation("SpawnPoopForPlayer: Cooldown check failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
-            _logger.LogInformation("SpawnPoopForPlayer: Cooldown check took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // 3. Check max poops per round limit
-            sectionStopwatch.Restart();
             if (_lifecycleManager.HasReachedMaxPoopsPerRound())
             {
                 controller.PrintToChat(_locale.GetString("poop.max_per_round"));
-                _logger.LogInformation("SpawnPoopForPlayer: Max poops check failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
-            _logger.LogInformation("SpawnPoopForPlayer: Max poops check took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // 4. Check if player is on the ground
-            sectionStopwatch.Restart();
             if (!pawn.Flags.HasFlag(EntityFlags.OnGround))
             {
                 controller.PrintToChat(_locale.GetString("poop.must_be_on_ground"));
-                _logger.LogInformation("SpawnPoopForPlayer: Ground check failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
                 return;
             }
-            _logger.LogInformation("SpawnPoopForPlayer: Ground check took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // 5. Get player's color preference from PoopPlayerManager (handles cache)
-            sectionStopwatch.Restart();
             PoopColorPreference colorPref;
             
             if (_config.EnableColorPreferences)
@@ -380,21 +360,14 @@ internal sealed class PoopCommands : IModule
                 var (r, g, b) = _config.GetDefaultColorRgb();
                 colorPref = new PoopColorPreference(r, g, b);
             }
-            _logger.LogInformation("SpawnPoopForPlayer: Color preference resolution took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
             // 6. Spawn poop with gathered parameters
-            sectionStopwatch.Restart();
             _spawner.SpawnPoopWithFullLogic(
                 player.Client,
                 size: -1.0f,
                 colorPref,
                 playSounds: true,
                 showMessages: true);
-            _logger.LogInformation("SpawnPoopForPlayer: SpawnPoopWithFullLogic took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
-            
-            totalStopwatch.Stop();
-            _logger.LogInformation("SpawnPoopForPlayer: Total execution time for {player}: {elapsed}ms", 
-                player.Name, totalStopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {

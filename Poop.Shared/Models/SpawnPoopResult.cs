@@ -12,7 +12,7 @@ public sealed class SpawnPoopResult
     /// <summary>
     /// The spawned poop entity (null if spawn failed)
     /// </summary>
-    public IBaseModelEntity? Entity { get; set; }
+    public IBaseEntity? Entity { get; set; }
 
     /// <summary>
     /// The actual size of the spawned poop

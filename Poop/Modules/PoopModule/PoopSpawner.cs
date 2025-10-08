@@ -52,61 +52,42 @@ internal sealed class PoopSpawner(
     /// <returns>Spawn result with entity, size, position, and victim info</returns>
     public SpawnPoopResult SpawnPoop(Vector position, float size = -1.0f, PoopColorPreference? color = null)
     {
-        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var sectionStopwatch = new System.Diagnostics.Stopwatch();
-        
         try
         {
-            // Create the physics prop entity as IBaseModelEntity so we can set RenderColor for rainbow mode
-            sectionStopwatch.Start();
-            var entity = bridge.EntityManager.CreateEntityByName<IBaseModelEntity>("prop_physics");
-            if (entity == null)
-            {
-                logger.LogInformation("SpawnPoop: CreateEntityByName failed in {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
-                return new SpawnPoopResult { Entity = null, Size = 0, Position = position };
-            }
-            logger.LogInformation("SpawnPoop: CreateEntityByName took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
+            // Determine size and properties upfront
+            float poopSize = size > 0 ? size : sizeGenerator.GetRandomSize();
+            float massFactor = poopSize * 0.05f;
+            var poopColor = GetPoopColor(color);
             
             // Configure spawn flags
-            sectionStopwatch.Restart();
-            entity.SpawnFlags = (uint)(
+            int spawnFlags = (int)(
                 SpawnFlags.PhysPropDebris |       // Don't collide with players
                 SpawnFlags.PhysPropTouch |        // Can be crashed through
                 SpawnFlags.PhysPropForceTouchTriggers
             );
 
-            // Determine size
-            float poopSize = size > 0 ? size : sizeGenerator.GetRandomSize();
-            float massFactor = poopSize * 0.05f;
-
-            // Get color for spawn
-            var poopColor = GetPoopColor(color);
-            logger.LogInformation("SpawnPoop: Property setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
-
-            // Spawn the entity with all properties set via key values
-            sectionStopwatch.Restart();
-            entity.DispatchSpawn(
+            // Create and spawn entity in one call using SpawnEntitySync
+            // Note: All keys must be lowercase as per the API documentation
+            var entity = bridge.EntityManager.SpawnEntitySync<IBaseModelEntity>("prop_physics",
                 new Dictionary<string, KeyValuesVariantValueItem>
                 {
                     {"model", config.PoopModel},
-                    {"spawnflags", entity.SpawnFlags},
+                    {"spawnflags", spawnFlags},
                     {"origin", $"{position.X} {position.Y} {position.Z}"},
                     {"scale", poopSize},
                     {"massscale", massFactor},
                     {"inertiascale", massFactor},
                     {"rendercolor", $"{poopColor.Red} {poopColor.Green} {poopColor.Blue}"}
-                }
-            );
-            logger.LogInformation("SpawnPoop: DispatchSpawn took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
+                });
+            if (entity == null)
+            {
+                return new SpawnPoopResult { Entity = null, Size = 0, Position = position };
+            }
             
             // Configure collision
-            sectionStopwatch.Restart();
             entity.SetCollisionGroup(CollisionGroupType.InteractiveDebris);
             entity.CollisionRulesChanged();
-            logger.LogInformation("SpawnPoop: Collision setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
-
             // Track poop for lifecycle management (lifetime, cleanup, etc.)
-            sectionStopwatch.Restart();
             lifecycleManager.TrackPoop(entity);
 
             // Track rainbow poops for color cycling
@@ -114,10 +95,6 @@ internal sealed class PoopSpawner(
             {
                 rainbowTracker.TrackRainbowPoop(entity);
             }
-            logger.LogInformation("SpawnPoop: Tracking setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
-
-            totalStopwatch.Stop();
-            logger.LogInformation("SpawnPoop: Total entity creation time: {elapsed}ms", totalStopwatch.ElapsedMilliseconds);
 
             return new SpawnPoopResult
             {
@@ -128,8 +105,7 @@ internal sealed class PoopSpawner(
         }
         catch (Exception ex)
         {
-            totalStopwatch.Stop();
-            logger.LogError(ex, "Error spawning poop entity after {elapsed}ms", totalStopwatch.ElapsedMilliseconds);
+            logger.LogError(ex, "Error spawning poop entity");
             return new SpawnPoopResult { Entity = null, Size = 0, Position = position };
         }
     }
@@ -306,11 +282,7 @@ internal sealed class PoopSpawner(
         bool playSounds = true,
         bool showMessages = true)
     {
-        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var sectionStopwatch = new System.Diagnostics.Stopwatch();
-        
         // Validate and extract player information upfront
-        sectionStopwatch.Start();
         if (player == null || !player.IsValid)
         {
             logger.LogWarning("SpawnPoopWithFullLogic called with invalid player");
@@ -336,29 +308,21 @@ internal sealed class PoopSpawner(
 
         string playerName = player.Name;
         SteamID playerSteamId = player.SteamId;
-        logger.LogInformation("SpawnPoopWithFullLogic: Player validation and setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
         
         // Find nearest dead player automatically
-        sectionStopwatch.Restart();
         var victimInfo = FindNearestDeadPlayer(player);
         var victim = victimInfo?.Player;
         
         // Extract victim information if present
         string? victimName = victim?.Name;
         SteamID? victimSteamId = victim?.SteamId;
-        logger.LogInformation("SpawnPoopWithFullLogic: Victim detection took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
         // Spawn the poop using the low-level spawner
-        sectionStopwatch.Restart();
         var result = SpawnPoop(position, size, colorPreference);
-        logger.LogInformation("SpawnPoopWithFullLogic: SpawnPoop entity creation took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
         if (result.Entity == null)
         {
-            totalStopwatch.Stop();
             logger.LogError("Failed to spawn poop at position {position}", position);
-            logger.LogInformation("SpawnPoopWithFullLogic: Failed spawn total time for {player}: {elapsed}ms", 
-                playerName, totalStopwatch.ElapsedMilliseconds);
             
             // Fire internal event for failed spawn
             PoopSpawnedInternal?.Invoke(new PoopSpawnedInternalEventArgs 
@@ -374,7 +338,6 @@ internal sealed class PoopSpawner(
         }
 
         // Post-spawn processing
-        sectionStopwatch.Restart();
         float poopSize = result.Size ?? size;
         string sizeDesc = sizeGenerator.GetSizeDescription(poopSize);
 
@@ -387,10 +350,8 @@ internal sealed class PoopSpawner(
             Victim = victim,
             Success = true
         });
-        logger.LogInformation("SpawnPoopWithFullLogic: Post-spawn event processing took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
         // Play sounds
-        sectionStopwatch.Restart();
         // Play poop sound with volume override support
         if (playSounds && config is { EnableSounds: true, PoopSoundsConfig.Length: > 0 })
         {
@@ -418,10 +379,8 @@ internal sealed class PoopSpawner(
                 }
             }
         }
-        logger.LogInformation("SpawnPoopWithFullLogic: Sound processing took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
         // Show messages
-        sectionStopwatch.Restart();
         if (showMessages && config.ShowMessageOnPoop)
         {
             // Special announcement for MASSIVE poops (size >= 2.0)
@@ -458,12 +417,9 @@ internal sealed class PoopSpawner(
                 }));
             }
         }
-        logger.LogInformation("SpawnPoopWithFullLogic: Message processing took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
 
         // Database logging setup (synchronous part)
-        sectionStopwatch.Restart();
         var currentMap = bridge.ModSharp.GetMapName() ?? "unknown";
-        logger.LogInformation("SpawnPoopWithFullLogic: Database setup took {elapsed}ms", sectionStopwatch.ElapsedMilliseconds);
         
         // Save to database (background thread)
         _ = bridge.ModSharp.InvokeFrameActionAsync(async () =>
@@ -512,10 +468,6 @@ internal sealed class PoopSpawner(
                 logger.LogError(dbEx, "Failed to save poop stats to database for {player}", playerName);
             }
         });
-
-        totalStopwatch.Stop();
-        logger.LogInformation("SpawnPoopWithFullLogic: Total execution time for {player}: {elapsed}ms", 
-            playerName, totalStopwatch.ElapsedMilliseconds);
 
         return result;
     }
